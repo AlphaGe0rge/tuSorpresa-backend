@@ -15,6 +15,14 @@ class SurpriseController {
 
         } catch (error) {
 
+            if (SurpriseController.isValidationError(error)) {
+
+                return res.status(400).json({
+                    success: false,
+                    message: error.message
+                });
+            }
+
             console.error('Error creating surprise:', error);
 
             return res.status(500).json({
@@ -23,6 +31,7 @@ class SurpriseController {
             });
         }
     }
+
 
     static async getPublic(req, res) {
 
@@ -48,6 +57,14 @@ class SurpriseController {
                 });
             }
 
+            if (error.message === 'SURPRISE_EXPIRED') {
+
+                return res.status(410).json({
+                    success: false,
+                    message: 'Surprise expired'
+                });
+            }
+
             console.error('Error getting public surprise:', error);
 
             return res.status(500).json({
@@ -57,13 +74,15 @@ class SurpriseController {
         }
     }
 
+
     static async getByEditToken(req, res) {
 
         try {
 
             const { editToken } = req.params;
 
-            const result = await SurpriseService.getByEditToken(editToken);
+            const result =
+                await SurpriseService.getByEditToken(editToken);
 
             return res.status(200).json({
                 success: true,
@@ -80,7 +99,10 @@ class SurpriseController {
                 });
             }
 
-            console.error('Error getting surprise by edit token:', error);
+            console.error(
+                'Error getting surprise by edit token:',
+                error
+            );
 
             return res.status(500).json({
                 success: false,
@@ -88,6 +110,7 @@ class SurpriseController {
             });
         }
     }
+
 
     static async updateByEditToken(req, res) {
 
@@ -108,6 +131,14 @@ class SurpriseController {
 
         } catch (error) {
 
+            if (SurpriseController.isValidationError(error)) {
+
+                return res.status(400).json({
+                    success: false,
+                    message: error.message
+                });
+            }
+
             if (error.message === 'SURPRISE_NOT_FOUND') {
 
                 return res.status(404).json({
@@ -124,6 +155,32 @@ class SurpriseController {
             });
         }
     }
+
+
+    static isValidationError(error) {
+
+        const validationErrors = [
+
+            'INVALID_DATA',
+
+            'TEMPLATE_REQUIRED',
+            'INVALID_TEMPLATE',
+
+            'RECIPIENT_NAME_REQUIRED',
+            'INVALID_RECIPIENT_NAME',
+
+            'TITLE_REQUIRED',
+            'INVALID_TITLE',
+
+            'MESSAGE_REQUIRED',
+            'INVALID_MESSAGE',
+
+            'INVALID_SENDER_NAME'
+        ];
+
+        return validationErrors.includes(error.message);
+    }
 }
+
 
 module.exports = SurpriseController;
