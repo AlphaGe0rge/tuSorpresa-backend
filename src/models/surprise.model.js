@@ -49,7 +49,11 @@ const Surprise = sequelize.define(
             type: DataTypes.TEXT,
             allowNull: true
         },
-
+        photos: {
+            type: DataTypes.JSON,
+            allowNull: false,
+            defaultValue: []
+        },
         status: {
             type: DataTypes.ENUM(
                 'ACTIVE',

@@ -32,7 +32,6 @@ class SurpriseController {
         }
     }
 
-
     static async getPublic(req, res) {
 
         try {
@@ -74,7 +73,6 @@ class SurpriseController {
         }
     }
 
-
     static async getByEditToken(req, res) {
 
         try {
@@ -110,7 +108,6 @@ class SurpriseController {
             });
         }
     }
-
 
     static async updateByEditToken(req, res) {
 
@@ -156,6 +153,104 @@ class SurpriseController {
         }
     }
 
+    static async uploadSurprisePhotos (req, res)  {
+
+        try {
+
+            const { editToken } = req.params;
+
+            const result =
+                await SurpriseService.uploadPhotos(
+                    editToken,
+                    req.files
+                );
+
+            return res.json({
+                success: true,
+                data: result
+            });
+
+        } catch (error) {
+
+            console.error(
+                'Unable to upload surprise photos:',
+                error
+            );
+
+            const statusCodes = {
+                SURPRISE_NOT_FOUND: 404,
+                SURPRISE_EXPIRED: 410,
+                PHOTOS_REQUIRED: 400,
+                TOO_MANY_PHOTOS: 400,
+                INVALID_PHOTO_TYPE: 400
+            };
+
+            return res.status(
+                statusCodes[error.message] || 500
+            ).json({
+                success: false,
+                message: error.message
+            });
+        }
+    };
+
+    static async deleteSurprisePhoto(req, res) {
+
+        try {
+
+            const {
+                editToken
+            } = req.params;
+
+
+            const {
+                key
+            } = req.body;
+
+
+            const result =
+                await SurpriseService.deletePhoto(
+                    editToken,
+                    key
+                );
+
+
+            return res.json({
+
+                success: true,
+
+                data: result
+            });
+
+        } catch (error) {
+
+            console.error(
+                'Unable to delete surprise photo:',
+                error
+            );
+
+
+            const statusCodes = {
+
+                SURPRISE_NOT_FOUND: 404,
+
+                SURPRISE_EXPIRED: 410,
+
+                PHOTO_NOT_FOUND: 404
+            };
+
+
+            return res.status(
+                statusCodes[error.message] || 500
+            ).json({
+
+                success: false,
+
+                message:
+                    error.message
+            });
+        }
+    }
 
     static isValidationError(error) {
 

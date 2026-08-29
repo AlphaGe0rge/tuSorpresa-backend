@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const Surprise = require('../models/surprise.model');
+const R2Service = require('./r2.service');
 
 class SurpriseService {
 
@@ -41,19 +42,12 @@ class SurpriseService {
             this.hashEditToken(editToken);
 
         const surprise = await Surprise.create({
-
             template: data.template,
-
             publicToken,
-
             editTokenHash,
-
-            recipientName:
-                data.recipientName,
-
-            senderName:
-                data.senderName || null,
-
+            recipientName: data.recipientName,
+            senderName: data.senderName || null,
+            photos: [],
             title: data.title || null,
             message: data.message || null,
             expiresAt: data.expiresAt || null,
@@ -88,6 +82,7 @@ class SurpriseService {
                 'senderName',
                 'title',
                 'message',
+                'photos',
                 'createdAt',
                 'expiresAt',
                 'status'
@@ -107,34 +102,73 @@ class SurpriseService {
     // GET BY EDIT TOKEN
     // ============================================================
 
-    static async getByEditToken(editToken) {
+    static async getByEditToken(
+        editToken
+    ) {
 
-        const editTokenHash = this.hashEditToken(editToken);
+        const editTokenHash =
+            this.hashEditToken(editToken);
 
-        const surprise = await Surprise.findOne({
-            where: {
-                editTokenHash
-            }
-        });
+
+        const surprise =
+            await Surprise.findOne({
+
+                where: {
+                    editTokenHash
+                }
+            });
+
 
         if (!surprise) {
-            throw new Error('SURPRISE_NOT_FOUND');
+
+            throw new Error(
+                'SURPRISE_NOT_FOUND'
+            );
         }
 
-        await this.ensureAvailable(surprise);
+
+        await this.ensureAvailable(
+            surprise
+        );
+
 
         return {
-            id: surprise.id,
-            template: surprise.template,
-            recipientName: surprise.recipientName,
-            senderName: surprise.senderName,
-            title: surprise.title,
-            message: surprise.message,
-            publicToken: surprise.publicToken,
-            status: surprise.status,
-            createdAt: surprise.createdAt,
-            updatedAt: surprise.updatedAt,
-            expiresAt: surprise.expiresAt
+
+            id:
+                surprise.id,
+
+            template:
+                surprise.template,
+
+            recipientName:
+                surprise.recipientName,
+
+            senderName:
+                surprise.senderName,
+
+            title:
+                surprise.title,
+
+            message:
+                surprise.message,
+
+            photos:
+                surprise.photos || [],
+
+            publicToken:
+                surprise.publicToken,
+
+            status:
+                surprise.status,
+
+            createdAt:
+                surprise.createdAt,
+
+            updatedAt:
+                surprise.updatedAt,
+
+            expiresAt:
+                surprise.expiresAt
         };
     }
 
@@ -182,14 +216,9 @@ class SurpriseService {
             senderName:
                 data.senderName || null,
 
-            title:
-                data.title || null,
-
-            message:
-                data.message || null,
-
-            expiresAt:
-                data.expiresAt || null
+            title: data.title || null,
+            message: data.message || null,
+            expiresAt: data.expiresAt || null
         });
 
         return {
@@ -210,6 +239,7 @@ class SurpriseService {
 
             message:
                 surprise.message,
+            photos: surprise.photos,
 
             publicToken:
                 surprise.publicToken,
@@ -221,7 +251,6 @@ class SurpriseService {
                 surprise.expiresAt
         };
     }
-
 
     static async ensureAvailable(surprise) {
 
@@ -253,6 +282,259 @@ class SurpriseService {
         return new Date(surprise.expiresAt) <= new Date();
     }
 
+    static getExtension(filename) {
+         return filename
+            .split('.')
+            .pop()
+            ?.toLowerCase() ?? '';
+    }
+
+    static async uploadPhotos(editToken,files) {
+
+        if (!editToken) {
+            throw new Error(
+                'SURPRISE_NOT_FOUND'
+            );
+        }
+
+
+        if (
+            !Array.isArray(files) ||
+            !files.length
+        ) {
+
+            throw new Error(
+                'PHOTOS_REQUIRED'
+            );
+        }
+
+
+        if (files.length > 3) {
+
+            throw new Error(
+                'TOO_MANY_PHOTOS'
+            );
+        }
+
+
+        const editTokenHash =
+            this.hashEditToken(editToken);
+
+
+        const surprise =
+            await Surprise.findOne({
+
+                where: {
+                    editTokenHash
+                }
+            });
+
+
+        if (!surprise) {
+
+            throw new Error(
+                'SURPRISE_NOT_FOUND'
+            );
+        }
+
+
+        await this.ensureAvailable(
+            surprise
+        );
+
+
+        const currentPhotos =
+            Array.isArray(surprise.photos)
+                ? surprise.photos
+                : [];
+
+
+        if (
+            currentPhotos.length +
+            files.length > 3
+        ) {
+
+            throw new Error(
+                'TOO_MANY_PHOTOS'
+            );
+        }
+
+
+        const uploadedPhotos = [];
+
+
+        try {
+
+            for (const file of files) {
+
+                const extension =
+                    this.getExtension(
+                        file.mimetype
+                    );
+
+
+                const fileName =
+                    `${crypto.randomUUID()}.${extension}`;
+
+
+                const key =
+                    `surprises/${surprise.publicToken}/${fileName}`;
+
+
+                const photo =
+                    await R2Service.upload(
+                        key,
+                        file.buffer,
+                        file.mimetype
+                    );
+
+
+                uploadedPhotos.push(
+                    photo
+                );
+            }
+
+
+            const photos = [
+                ...currentPhotos,
+                ...uploadedPhotos
+            ];
+
+
+            await surprise.update({
+                photos
+            });
+
+
+            return {
+                photos
+            };
+
+        } catch (error) {
+
+            /*
+            * Si una subida falla después de
+            * haber subido alguna foto,
+            * intentamos limpiar las anteriores.
+            */
+
+            for (
+                const photo
+                of uploadedPhotos
+            ) {
+
+                try {
+
+                    await R2Service.delete(
+                        photo.key
+                    );
+
+                } catch (deleteError) {
+
+                    console.error(
+                        'Unable to rollback R2 photo:',
+                        deleteError
+                    );
+                }
+            }
+
+
+            console.error(
+                'Unable to upload surprise photos:',
+                error
+            );
+
+
+            throw error;
+        }
+    }
+
+    static async deletePhoto(editToken, photoKey) {
+
+        if (!editToken) {
+
+            throw new Error(
+                'SURPRISE_NOT_FOUND'
+            );
+        }
+
+
+        if (!photoKey) {
+
+            throw new Error(
+                'PHOTO_NOT_FOUND'
+            );
+        }
+
+
+        const editTokenHash =
+            this.hashEditToken(editToken);
+
+
+        const surprise =
+            await Surprise.findOne({
+
+                where: {
+                    editTokenHash
+                }
+            });
+
+
+        if (!surprise) {
+
+            throw new Error(
+                'SURPRISE_NOT_FOUND'
+            );
+        }
+
+
+        await this.ensureAvailable(
+            surprise
+        );
+
+
+        const currentPhotos =
+            Array.isArray(surprise.photos)
+                ? surprise.photos
+                : [];
+
+
+        const photo =
+            currentPhotos.find(
+                item =>
+                    item.key === photoKey
+            );
+
+
+        if (!photo) {
+
+            throw new Error(
+                'PHOTO_NOT_FOUND'
+            );
+        }
+
+
+        await R2Service.delete(
+            photo.key
+        );
+
+
+        const photos =
+            currentPhotos.filter(
+                item =>
+                    item.key !== photoKey
+            );
+
+
+        await surprise.update({
+            photos
+        });
+
+
+        return {
+            photos
+        };
+    }
     // ============================================================
     // VALIDATION
     // ============================================================
@@ -358,6 +640,14 @@ class SurpriseService {
 
         if (data.message.length > 10000) {
             throw new Error('INVALID_MESSAGE');
+        }
+
+        if (data.photos !== undefined && data.photos !== null && !Array.isArray(data.photos)) {
+            throw new Error('INVALID_PHOTOS');
+        }
+
+        if (Array.isArray(data.photos) && data.photos.length > 3) {
+            throw new Error('TOO_MANY_PHOTOS');
         }
     }
 }
