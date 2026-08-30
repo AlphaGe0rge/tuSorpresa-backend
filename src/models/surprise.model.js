@@ -49,6 +49,10 @@ const Surprise = sequelize.define(
             type: DataTypes.TEXT,
             allowNull: true
         },
+        email: {
+            type: DataTypes.STRING(255),
+            allowNull: false
+        },
         photos: {
             type: DataTypes.JSON,
             allowNull: false,

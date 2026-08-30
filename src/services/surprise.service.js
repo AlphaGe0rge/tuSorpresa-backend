@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const Surprise = require('../models/surprise.model');
 const R2Service = require('./r2.service');
+const EmailService = require('./email.service');
 
 class SurpriseService {
 
@@ -47,12 +48,30 @@ class SurpriseService {
             editTokenHash,
             recipientName: data.recipientName,
             senderName: data.senderName || null,
+            email: data.email,
             photos: [],
             title: data.title || null,
             message: data.message || null,
             expiresAt: data.expiresAt || null,
             status: 'ACTIVE'
         });
+
+        try {
+
+            await EmailService.sendSurpriseCreated({
+                email: surprise.email,
+                recipientName: surprise.recipientName,
+                publicToken,
+                editToken
+            });
+
+        } catch (error) {
+
+            console.error(
+                'Unable to send surprise email:',
+                error
+            );
+        }
 
         return {
 
@@ -145,7 +164,7 @@ class SurpriseService {
 
             senderName:
                 surprise.senderName,
-
+            email: surprise.email,
             title:
                 surprise.title,
 
@@ -206,16 +225,10 @@ class SurpriseService {
         await this.ensureAvailable(surprise);
 
         await surprise.update({
-
-            template:
-                data.template,
-
-            recipientName:
-                data.recipientName,
-
-            senderName:
-                data.senderName || null,
-
+            template: data.template,
+            recipientName: data.recipientName,
+            email: data.email,
+            senderName: data.senderName || null,
             title: data.title || null,
             message: data.message || null,
             expiresAt: data.expiresAt || null
@@ -588,6 +601,28 @@ class SurpriseService {
             throw new Error('INVALID_RECIPIENT_NAME');
         }
 
+        // ============================================================
+        // EMAIL
+        // ============================================================
+
+        if (typeof data.email !== 'string') {
+            throw new Error('INVALID_EMAIL');
+        }
+
+        if (!data.email.trim()) {
+            throw new Error('EMAIL_REQUIRED');
+        }
+
+        if (data.email.length > 255) {
+            throw new Error('INVALID_EMAIL');
+        }
+
+        const emailRegex =
+            /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+        if (!emailRegex.test(data.email.trim())) {
+            throw new Error('INVALID_EMAIL');
+        }
 
         // ------------------------------------------------------------
         // SENDER
