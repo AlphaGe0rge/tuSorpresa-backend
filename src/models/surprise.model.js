@@ -58,6 +58,11 @@ const Surprise = sequelize.define(
             allowNull: false,
             defaultValue: []
         },
+        dynamicData: {
+            type: DataTypes.JSON,
+            allowNull: false,
+            defaultValue: {}
+        },
         status: {
             type: DataTypes.ENUM(
                 'ACTIVE',

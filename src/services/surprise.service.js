@@ -44,16 +44,37 @@ class SurpriseService {
 
         const surprise = await Surprise.create({
             template: data.template,
+
             publicToken,
+
             editTokenHash,
-            recipientName: data.recipientName,
-            senderName: data.senderName || null,
-            email: data.email,
-            photos: [],
-            title: data.title || null,
-            message: data.message || null,
-            expiresAt: data.expiresAt || null,
-            status: 'ACTIVE'
+
+            recipientName:
+                data.recipientName,
+
+            senderName:
+                data.senderName || null,
+
+            email:
+                data.email,
+
+            photos:
+                [],
+
+            dynamicData:
+                data.dynamicData || {},
+
+            title:
+                data.title || null,
+
+            message:
+                data.message || null,
+
+            expiresAt:
+                data.expiresAt || null,
+
+            status:
+                'ACTIVE'
         });
 
         try {
@@ -102,6 +123,7 @@ class SurpriseService {
                 'title',
                 'message',
                 'photos',
+                'dynamicData',
                 'createdAt',
                 'expiresAt',
                 'status'
@@ -173,6 +195,8 @@ class SurpriseService {
 
             photos:
                 surprise.photos || [],
+            
+            dynamicData: surprise.dynamicData || {},
 
             publicToken:
                 surprise.publicToken,
@@ -231,6 +255,7 @@ class SurpriseService {
             senderName: data.senderName || null,
             title: data.title || null,
             message: data.message || null,
+            dynamicData: data.dynamicData || {},
             expiresAt: data.expiresAt || null
         });
 
@@ -250,12 +275,13 @@ class SurpriseService {
             title:
                 surprise.title,
 
-            message:
-                surprise.message,
+            message: surprise.message,
             photos: surprise.photos,
 
             publicToken:
                 surprise.publicToken,
+
+            dynamicData: surprise.dynamicData || {},
 
             updatedAt:
                 surprise.updatedAt,
@@ -683,6 +709,12 @@ class SurpriseService {
 
         if (Array.isArray(data.photos) && data.photos.length > 3) {
             throw new Error('TOO_MANY_PHOTOS');
+        }
+
+
+        if (data.dynamicData !== undefined && data.dynamicData !== null && 
+            (typeof data.dynamicData !== 'object' || Array.isArray(data.dynamicData))) {
+            throw new Error('INVALID_DYNAMIC_DATA');
         }
     }
 }
