@@ -602,6 +602,7 @@ class SurpriseService {
 
         const AVAILABLE_TEMPLATES = [
             'love-01',
+            'love-02',
             'birthday-01',
             'friendship-01'
         ];
@@ -674,17 +675,17 @@ class SurpriseService {
         // TITLE
         // ------------------------------------------------------------
 
-        if (typeof data.title !== 'string') {
-            throw new Error('INVALID_TITLE');
-        }
+        // if (typeof data.title !== 'string') {
+        //     throw new Error('INVALID_TITLE');
+        // }
 
-        if (!data.title.trim()) {
-            throw new Error('TITLE_REQUIRED');
-        }
+        // if (!data.title.trim()) {
+        //     throw new Error('TITLE_REQUIRED');
+        // }
 
-        if (data.title.length > 150) {
-            throw new Error('INVALID_TITLE');
-        }
+        // if (data.title.length > 150) {
+        //     throw new Error('INVALID_TITLE');
+        // }
 
 
         // ------------------------------------------------------------
