@@ -10,6 +10,12 @@ const Surprise = sequelize.define(
             primaryKey: true
         },
 
+        userId: {
+            type: DataTypes.UUID,
+            allowNull: false,
+            field: 'user_id'
+        },
+
         template: {
             type: DataTypes.STRING(100),
             allowNull: false

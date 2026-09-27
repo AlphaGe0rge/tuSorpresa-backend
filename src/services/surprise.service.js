@@ -29,9 +29,13 @@ class SurpriseService {
     // CREATE
     // ============================================================
 
-    static async create(data) {
+    static async create(data, userId) {
 
         this.validateData(data);
+
+        if (!userId) {
+            throw new Error('USER_REQUIRED');
+        }
 
         const publicToken =
             this.generateToken();
@@ -43,7 +47,19 @@ class SurpriseService {
             this.hashEditToken(editToken);
 
         const surprise = await Surprise.create({
-            template: data.template,
+
+            // ========================================================
+            // USER
+            // ========================================================
+
+            userId,
+
+            // ========================================================
+            // SURPRISE
+            // ========================================================
+
+            template:
+                data.template,
 
             publicToken,
 
@@ -58,8 +74,7 @@ class SurpriseService {
             email:
                 data.email,
 
-            photos:
-                [],
+            photos: [],
 
             dynamicData:
                 data.dynamicData || {},
@@ -77,13 +92,25 @@ class SurpriseService {
                 'ACTIVE'
         });
 
+
+        // ============================================================
+        // EMAIL
+        // ============================================================
+
         try {
 
             await EmailService.sendSurpriseCreated({
-                email: surprise.email,
-                recipientName: surprise.recipientName,
+
+                email:
+                    surprise.email,
+
+                recipientName:
+                    surprise.recipientName,
+
                 publicToken,
+
                 editToken
+
             });
 
         } catch (error) {
@@ -94,16 +121,54 @@ class SurpriseService {
             );
         }
 
+
+        // ============================================================
+        // RESPONSE
+        // ============================================================
+
         return {
 
-            id: surprise.id,
+            id:
+                surprise.id,
 
             publicToken,
 
             editToken
+
         };
     }
 
+    // ============================================================
+    // GET MY SURPRISES
+    // ============================================================
+
+    static async getByUserId(userId) {
+
+        if (!userId) {
+            throw new Error('USER_REQUIRED');
+        }
+
+        const surprises =
+            await Surprise.findAll({
+
+                where: {
+                    userId
+                },
+
+                order: [
+                    ['createdAt', 'DESC']
+                ],
+
+                attributes: {
+                    exclude: [
+                        'editTokenHash'
+                    ]
+                }
+
+            });
+
+        return surprises;
+    }
 
     // ============================================================
     // GET PUBLIC
@@ -604,7 +669,9 @@ class SurpriseService {
             'love-01',
             'love-02',
             'birthday-01',
-            'friendship-01'
+            'friendship-01',
+            'invitation-01',
+            'anniversary-01'
         ];
 
         if (!AVAILABLE_TEMPLATES.includes(data.template)) {
