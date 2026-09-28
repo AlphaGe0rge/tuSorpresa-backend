@@ -7,6 +7,8 @@ const sequelize = require('../src/config/database');
 require('../src/models');
 
 const surpriseRoutes = require('../src/routes/surprise.routes');
+const paymentRoutes = require('./routes/payment.routes');
+const authRoutes = require('./routes/auth.routes');
 
 const app = express();
 
@@ -23,6 +25,9 @@ app.use(express.json());
 
 // Routes
 app.use('/api/surprises', surpriseRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/auth', authRoutes);
+
 
 
 // Health check

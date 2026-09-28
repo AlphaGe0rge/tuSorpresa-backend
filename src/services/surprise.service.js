@@ -88,8 +88,8 @@ class SurpriseService {
             expiresAt:
                 data.expiresAt || null,
 
-            status:
-                'ACTIVE'
+            status: 'ACTIVE'
+            // status: 'PENDING_PAYMENT'
         });
 
 
@@ -176,30 +176,49 @@ class SurpriseService {
 
     static async getPublic(publicToken) {
 
-        const surprise = await Surprise.findOne({
-            where: {
-                publicToken
-            },
-            attributes: [
-                'id',
-                'template',
-                'recipientName',
-                'senderName',
-                'title',
-                'message',
-                'photos',
-                'dynamicData',
-                'createdAt',
-                'expiresAt',
-                'status'
-            ]
-        });
+        const surprise =
+            await Surprise.findOne({
+                where: {
+                    publicToken
+                },
+
+                attributes: [
+                    'id',
+                    'template',
+                    'recipientName',
+                    'senderName',
+                    'title',
+                    'message',
+                    'photos',
+                    'dynamicData',
+                    'createdAt',
+                    'expiresAt',
+                    'status'
+                ]
+            });
+
 
         if (!surprise) {
-            throw new Error('SURPRISE_NOT_FOUND');
+            throw new Error(
+                'SURPRISE_NOT_FOUND'
+            );
         }
 
-        await this.ensureAvailable(surprise);
+
+        if (
+            surprise.status ===
+            'PENDING_PAYMENT'
+        ) {
+            throw new Error(
+                'SURPRISE_NOT_FOUND'
+            );
+        }
+
+
+        await this.ensureAvailable(
+            surprise
+        );
+
 
         return surprise;
     }

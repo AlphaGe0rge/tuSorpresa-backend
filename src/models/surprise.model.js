@@ -71,11 +71,13 @@ const Surprise = sequelize.define(
         },
         status: {
             type: DataTypes.ENUM(
+                'PENDING_PAYMENT',
                 'ACTIVE',
                 'EXPIRED',
                 'DISABLED'
             ),
             allowNull: false,
+            // defaultValue: 'PENDING_PAYMENT'
             defaultValue: 'ACTIVE'
         },
 
