@@ -1,4 +1,5 @@
-const express = require('express');
+const express =
+    require('express');
 
 const SurpriseController =
     require('../controllers/surprise.controller');
@@ -6,17 +7,13 @@ const SurpriseController =
 const authMiddleware =
     require('../middleware/auth.middleware');
 
-const router = express.Router();
-
 const uploadPhotos =
     require('../middleware/upload-photos');
 
+const router =
+    express.Router();
 
-// ============================================================
-// AUTHENTICATED
-// ============================================================
 
-// Crear sorpresa
 router.post(
     '/',
     authMiddleware,
@@ -24,11 +21,6 @@ router.post(
 );
 
 
-// Obtener mis sorpresas
-//
-// IMPORTANTE:
-// Esta ruta debe estar ANTES de /:publicToken
-// para que "mine" no sea interpretado como publicToken.
 router.get(
     '/mine',
     authMiddleware,
@@ -36,13 +28,44 @@ router.get(
 );
 
 
-// ============================================================
-// EDIT TOKEN
-// ============================================================
+router.get(
+    '/my/:id',
+    authMiddleware,
+    SurpriseController.getMyById
+);
+
+
+router.put(
+    '/my/:id',
+    authMiddleware,
+    SurpriseController.updateMyById
+);
+
+
+router.post(
+    '/my/:id/photos',
+    authMiddleware,
+    uploadPhotos.array('photos', 3),
+    SurpriseController.uploadMySurprisePhotos
+);
+
+
+router.delete(
+    '/my/:id/photos',
+    authMiddleware,
+    SurpriseController.deleteMySurprisePhoto
+);
+
 
 router.get(
     '/edit/:editToken',
     SurpriseController.getByEditToken
+);
+
+
+router.put(
+    '/edit/:editToken',
+    SurpriseController.updateByEditToken
 );
 
 
@@ -59,20 +82,11 @@ router.delete(
 );
 
 
-router.put(
-    '/edit/:editToken',
-    SurpriseController.updateByEditToken
-);
-
-
-// ============================================================
-// PUBLIC
-// ============================================================
-
 router.get(
     '/:publicToken',
     SurpriseController.getPublic
 );
 
 
-module.exports = router;
+module.exports =
+    router;

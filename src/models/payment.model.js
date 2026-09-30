@@ -12,7 +12,7 @@ const Payment = sequelize.define(
         },
 
         surpriseId: {
-            type: DataTypes.BIGINT.UNSIGNED,
+            type: DataTypes.UUID,
             allowNull: false,
             field: 'surprise_id'
         },

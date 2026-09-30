@@ -5,9 +5,10 @@ const Surprise = sequelize.define(
     'Surprise',
     {
         id: {
-            type: DataTypes.BIGINT.UNSIGNED,
-            autoIncrement: true,
-            primaryKey: true
+            type: DataTypes.UUID,
+            defaultValue: DataTypes.UUIDV4,
+            primaryKey: true,
+            allowNull: false
         },
 
         userId: {

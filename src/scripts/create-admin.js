@@ -4,7 +4,7 @@ const bcrypt = require('bcryptjs');
 
 const {
   User
-} = require('../src/models');
+} = require('../models');
 
 async function createAdmin() {
 

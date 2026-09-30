@@ -1,13 +1,16 @@
 const crypto = require('crypto');
-const Surprise = require('../models/surprise.model');
-const R2Service = require('./r2.service');
-const EmailService = require('./email.service');
+
+const Surprise =
+    require('../models/surprise.model');
+
+const R2Service =
+    require('./r2.service');
+
+const EmailService =
+    require('./email.service');
+
 
 class SurpriseService {
-
-    // ============================================================
-    // TOKENS
-    // ============================================================
 
     static generateToken() {
 
@@ -15,6 +18,7 @@ class SurpriseService {
             .randomBytes(32)
             .toString('hex');
     }
+
 
     static hashEditToken(token) {
 
@@ -24,10 +28,6 @@ class SurpriseService {
             .digest('hex');
     }
 
-
-    // ============================================================
-    // CREATE
-    // ============================================================
 
     static async create(data, userId) {
 
@@ -44,58 +44,48 @@ class SurpriseService {
             this.generateToken();
 
         const editTokenHash =
-            this.hashEditToken(editToken);
+            this.hashEditToken(
+                editToken
+            );
 
-        const surprise = await Surprise.create({
+        const surprise =
+            await Surprise.create({
 
-            // ========================================================
-            // USER
-            // ========================================================
+                userId,
 
-            userId,
+                template:
+                    data.template,
 
-            // ========================================================
-            // SURPRISE
-            // ========================================================
+                publicToken,
 
-            template:
-                data.template,
+                editTokenHash,
 
-            publicToken,
+                recipientName:
+                    data.recipientName,
 
-            editTokenHash,
+                senderName:
+                    data.senderName || null,
 
-            recipientName:
-                data.recipientName,
+                email:
+                    data.email,
 
-            senderName:
-                data.senderName || null,
+                photos: [],
 
-            email:
-                data.email,
+                dynamicData:
+                    data.dynamicData || {},
 
-            photos: [],
+                title:
+                    data.title || null,
 
-            dynamicData:
-                data.dynamicData || {},
+                message:
+                    data.message || null,
 
-            title:
-                data.title || null,
+                expiresAt:
+                    data.expiresAt || null,
 
-            message:
-                data.message || null,
+                status: 'ACTIVE'
+            });
 
-            expiresAt:
-                data.expiresAt || null,
-
-            status: 'ACTIVE'
-            // status: 'PENDING_PAYMENT'
-        });
-
-
-        // ============================================================
-        // EMAIL
-        // ============================================================
 
         try {
 
@@ -122,10 +112,6 @@ class SurpriseService {
         }
 
 
-        // ============================================================
-        // RESPONSE
-        // ============================================================
-
         return {
 
             id:
@@ -138,9 +124,6 @@ class SurpriseService {
         };
     }
 
-    // ============================================================
-    // GET MY SURPRISES
-    // ============================================================
 
     static async getByUserId(userId) {
 
@@ -170,45 +153,38 @@ class SurpriseService {
         return surprises;
     }
 
-    // ============================================================
-    // GET PUBLIC
-    // ============================================================
 
-    static async getPublic(publicToken) {
+    static async getMyById(
+        surpriseId,
+        userId
+    ) {
+
+        if (!userId) {
+            throw new Error('USER_REQUIRED');
+        }
+
+        if (!surpriseId) {
+            throw new Error('SURPRISE_NOT_FOUND');
+        }
 
         const surprise =
             await Surprise.findOne({
+
                 where: {
-                    publicToken
+                    id: surpriseId,
+                    userId
                 },
 
-                attributes: [
-                    'id',
-                    'template',
-                    'recipientName',
-                    'senderName',
-                    'title',
-                    'message',
-                    'photos',
-                    'dynamicData',
-                    'createdAt',
-                    'expiresAt',
-                    'status'
-                ]
+                attributes: {
+                    exclude: [
+                        'editTokenHash'
+                    ]
+                }
+
             });
 
 
         if (!surprise) {
-            throw new Error(
-                'SURPRISE_NOT_FOUND'
-            );
-        }
-
-
-        if (
-            surprise.status ===
-            'PENDING_PAYMENT'
-        ) {
             throw new Error(
                 'SURPRISE_NOT_FOUND'
             );
@@ -223,28 +199,123 @@ class SurpriseService {
         return surprise;
     }
 
-    // ============================================================
-    // GET BY EDIT TOKEN
-    // ============================================================
 
-    static async getByEditToken(
-        editToken
+    static async updateMyById(
+        surpriseId,
+        userId,
+        data
     ) {
 
-        const editTokenHash =
-            this.hashEditToken(editToken);
+        if (!userId) {
+            throw new Error('USER_REQUIRED');
+        }
 
+        if (!surpriseId) {
+            throw new Error(
+                'SURPRISE_NOT_FOUND'
+            );
+        }
 
         const surprise =
             await Surprise.findOne({
 
                 where: {
-                    editTokenHash
+                    id: surpriseId,
+                    userId
                 }
+
             });
 
 
         if (!surprise) {
+            throw new Error(
+                'SURPRISE_NOT_FOUND'
+            );
+        }
+
+
+        await this.ensureAvailable(
+            surprise
+        );
+
+
+        const validated =
+            this.validateData(data);
+
+
+        await surprise.update({
+
+            template:
+                validated.template,
+
+            recipientName:
+                validated.recipientName,
+
+            email:
+                validated.email,
+
+            senderName:
+                validated.senderName,
+
+            title:
+                validated.title,
+
+            message:
+                validated.message,
+
+            dynamicData:
+                validated.dynamicData,
+
+            expiresAt:
+                validated.expiresAt
+
+        });
+
+
+        return this.serializeSurprise(
+            surprise
+        );
+    }
+
+
+    static async getPublic(publicToken) {
+
+        const surprise =
+            await Surprise.findOne({
+
+                where: {
+                    publicToken
+                },
+
+                attributes: [
+                    'id',
+                    'template',
+                    'recipientName',
+                    'senderName',
+                    'title',
+                    'message',
+                    'photos',
+                    'dynamicData',
+                    'createdAt',
+                    'updatedAt',
+                    'expiresAt',
+                    'status'
+                ]
+
+            });
+
+
+        if (!surprise) {
+            throw new Error(
+                'SURPRISE_NOT_FOUND'
+            );
+        }
+
+
+        if (
+            surprise.status ===
+            'PENDING_PAYMENT'
+        ) {
 
             throw new Error(
                 'SURPRISE_NOT_FOUND'
@@ -257,162 +328,58 @@ class SurpriseService {
         );
 
 
-        return {
-
-            id:
-                surprise.id,
-
-            template:
-                surprise.template,
-
-            recipientName:
-                surprise.recipientName,
-
-            senderName:
-                surprise.senderName,
-            email: surprise.email,
-            title:
-                surprise.title,
-
-            message:
-                surprise.message,
-
-            photos:
-                surprise.photos || [],
-            
-            dynamicData: surprise.dynamicData || {},
-
-            publicToken:
-                surprise.publicToken,
-
-            status:
-                surprise.status,
-
-            createdAt:
-                surprise.createdAt,
-
-            updatedAt:
-                surprise.updatedAt,
-
-            expiresAt:
-                surprise.expiresAt
-        };
+        return surprise;
     }
 
-    // ============================================================
-    // UPDATE BY EDIT TOKEN
-    // ============================================================
 
-    static async updateByEditToken(editToken, data) {
+    static async getByEditToken(
+        editToken
+    ) {
 
         if (!editToken) {
-
             throw new Error(
                 'SURPRISE_NOT_FOUND'
             );
         }
 
-        this.validateData(data);
+        const editTokenHash =
+            this.hashEditToken(
+                editToken
+            );
 
-        const editTokenHash = this.hashEditToken(editToken);
 
-        const surprise = await Surprise.findOne({
+        const surprise =
+            await Surprise.findOne({
 
-            where: {
-                editTokenHash
-            }
-        });
+                where: {
+                    editTokenHash
+                }
+
+            });
+
 
         if (!surprise) {
-
             throw new Error(
                 'SURPRISE_NOT_FOUND'
             );
         }
 
-        await this.ensureAvailable(surprise);
 
-        await surprise.update({
-            template: data.template,
-            recipientName: data.recipientName,
-            email: data.email,
-            senderName: data.senderName || null,
-            title: data.title || null,
-            message: data.message || null,
-            dynamicData: data.dynamicData || {},
-            expiresAt: data.expiresAt || null
-        });
+        await this.ensureAvailable(
+            surprise
+        );
 
-        return {
 
-            id: surprise.id,
-
-            template:
-                surprise.template,
-
-            recipientName:
-                surprise.recipientName,
-
-            senderName:
-                surprise.senderName,
-
-            title:
-                surprise.title,
-
-            message: surprise.message,
-            photos: surprise.photos,
-
-            publicToken:
-                surprise.publicToken,
-
-            dynamicData: surprise.dynamicData || {},
-
-            updatedAt:
-                surprise.updatedAt,
-
-            expiresAt:
-                surprise.expiresAt
-        };
+        return this.serializeSurprise(
+            surprise
+        );
     }
 
-    static async ensureAvailable(surprise) {
 
-        if (surprise.status === 'DELETED') {
-            throw new Error('SURPRISE_NOT_FOUND');
-        }
-
-        if (
-            surprise.status === 'EXPIRED' || this.isExpired(surprise)
-        ) {
-
-            if (surprise.status !== 'EXPIRED') {
-
-                await surprise.update({
-                    status: 'EXPIRED'
-                });
-            }
-
-            throw new Error('SURPRISE_EXPIRED');
-        }
-    }
-    
-    static isExpired(surprise) {
-
-        if (!surprise.expiresAt) {
-            return false;
-        }
-
-        return new Date(surprise.expiresAt) <= new Date();
-    }
-
-    static getExtension(filename) {
-         return filename
-            .split('.')
-            .pop()
-            ?.toLowerCase() ?? '';
-    }
-
-    static async uploadPhotos(editToken,files) {
+    static async updateByEditToken(
+        editToken,
+        data
+    ) {
 
         if (!editToken) {
             throw new Error(
@@ -420,6 +387,247 @@ class SurpriseService {
             );
         }
 
+
+        const editTokenHash =
+            this.hashEditToken(
+                editToken
+            );
+
+
+        const surprise =
+            await Surprise.findOne({
+
+                where: {
+                    editTokenHash
+                }
+
+            });
+
+
+        if (!surprise) {
+            throw new Error(
+                'SURPRISE_NOT_FOUND'
+            );
+        }
+
+
+        await this.ensureAvailable(
+            surprise
+        );
+
+
+        const validated =
+            this.validateData(data);
+
+
+        await surprise.update({
+
+            template:
+                validated.template,
+
+            recipientName:
+                validated.recipientName,
+
+            email:
+                validated.email,
+
+            senderName:
+                validated.senderName,
+
+            title:
+                validated.title,
+
+            message:
+                validated.message,
+
+            dynamicData:
+                validated.dynamicData,
+
+            expiresAt:
+                validated.expiresAt
+
+        });
+
+
+        return this.serializeSurprise(
+            surprise
+        );
+    }
+
+
+    static async uploadPhotosByUser(
+        surpriseId,
+        userId,
+        files
+    ) {
+
+        if (!userId) {
+            throw new Error('USER_REQUIRED');
+        }
+
+        const surprise =
+            await this.findOwnedSurprise(
+                surpriseId,
+                userId
+            );
+
+        return this.uploadPhotosToSurprise(
+            surprise,
+            files
+        );
+    }
+
+
+    static async deletePhotoByUser(
+        surpriseId,
+        userId,
+        photoKey
+    ) {
+
+        if (!userId) {
+            throw new Error('USER_REQUIRED');
+        }
+
+        const surprise =
+            await this.findOwnedSurprise(
+                surpriseId,
+                userId
+            );
+
+        return this.deletePhotoFromSurprise(
+            surprise,
+            photoKey
+        );
+    }
+
+
+    static async uploadPhotos(
+        editToken,
+        files
+    ) {
+
+        if (!editToken) {
+            throw new Error(
+                'SURPRISE_NOT_FOUND'
+            );
+        }
+
+
+        const editTokenHash =
+            this.hashEditToken(
+                editToken
+            );
+
+
+        const surprise =
+            await Surprise.findOne({
+
+                where: {
+                    editTokenHash
+                }
+
+            });
+
+
+        if (!surprise) {
+            throw new Error(
+                'SURPRISE_NOT_FOUND'
+            );
+        }
+
+
+        return this.uploadPhotosToSurprise(
+            surprise,
+            files
+        );
+    }
+
+
+    static async deletePhoto(
+        editToken,
+        photoKey
+    ) {
+
+        if (!editToken) {
+            throw new Error(
+                'SURPRISE_NOT_FOUND'
+            );
+        }
+
+
+        const editTokenHash =
+            this.hashEditToken(
+                editToken
+            );
+
+
+        const surprise =
+            await Surprise.findOne({
+
+                where: {
+                    editTokenHash
+                }
+
+            });
+
+
+        if (!surprise) {
+            throw new Error(
+                'SURPRISE_NOT_FOUND'
+            );
+        }
+
+
+        return this.deletePhotoFromSurprise(
+            surprise,
+            photoKey
+        );
+    }
+
+
+    static async findOwnedSurprise(
+        surpriseId,
+        userId
+    ) {
+
+        if (!surpriseId) {
+            throw new Error(
+                'SURPRISE_NOT_FOUND'
+            );
+        }
+
+
+        const surprise =
+            await Surprise.findOne({
+
+                where: {
+                    id: surpriseId,
+                    userId
+                }
+
+            });
+
+
+        if (!surprise) {
+            throw new Error(
+                'SURPRISE_NOT_FOUND'
+            );
+        }
+
+
+        await this.ensureAvailable(
+            surprise
+        );
+
+
+        return surprise;
+    }
+
+
+    static async uploadPhotosToSurprise(
+        surprise,
+        files
+    ) {
 
         if (
             !Array.isArray(files) ||
@@ -440,41 +648,23 @@ class SurpriseService {
         }
 
 
-        const editTokenHash =
-            this.hashEditToken(editToken);
-
-
-        const surprise =
-            await Surprise.findOne({
-
-                where: {
-                    editTokenHash
-                }
-            });
-
-
-        if (!surprise) {
-
-            throw new Error(
-                'SURPRISE_NOT_FOUND'
-            );
-        }
-
-
         await this.ensureAvailable(
             surprise
         );
 
 
         const currentPhotos =
-            Array.isArray(surprise.photos)
+            Array.isArray(
+                surprise.photos
+            )
                 ? surprise.photos
                 : [];
 
 
         if (
             currentPhotos.length +
-            files.length > 3
+            files.length >
+            3
         ) {
 
             throw new Error(
@@ -488,12 +678,30 @@ class SurpriseService {
 
         try {
 
-            for (const file of files) {
+            for (
+                const file of files
+            ) {
 
                 const extension =
                     this.getExtension(
-                        file.mimetype
+                        file.originalname
                     );
+
+
+                if (
+                    ![
+                        'jpg',
+                        'jpeg',
+                        'png',
+                        'webp',
+                        'gif'
+                    ].includes(extension)
+                ) {
+
+                    throw new Error(
+                        'INVALID_PHOTO_TYPE'
+                    );
+                }
 
 
                 const fileName =
@@ -535,12 +743,6 @@ class SurpriseService {
 
         } catch (error) {
 
-            /*
-            * Si una subida falla después de
-            * haber subido alguna foto,
-            * intentamos limpiar las anteriores.
-            */
-
             for (
                 const photo
                 of uploadedPhotos
@@ -562,51 +764,19 @@ class SurpriseService {
             }
 
 
-            console.error(
-                'Unable to upload surprise photos:',
-                error
-            );
-
-
             throw error;
         }
     }
 
-    static async deletePhoto(editToken, photoKey) {
 
-        if (!editToken) {
-
-            throw new Error(
-                'SURPRISE_NOT_FOUND'
-            );
-        }
-
+    static async deletePhotoFromSurprise(
+        surprise,
+        photoKey
+    ) {
 
         if (!photoKey) {
-
             throw new Error(
                 'PHOTO_NOT_FOUND'
-            );
-        }
-
-
-        const editTokenHash =
-            this.hashEditToken(editToken);
-
-
-        const surprise =
-            await Surprise.findOne({
-
-                where: {
-                    editTokenHash
-                }
-            });
-
-
-        if (!surprise) {
-
-            throw new Error(
-                'SURPRISE_NOT_FOUND'
             );
         }
 
@@ -617,7 +787,9 @@ class SurpriseService {
 
 
         const currentPhotos =
-            Array.isArray(surprise.photos)
+            Array.isArray(
+                surprise.photos
+            )
                 ? surprise.photos
                 : [];
 
@@ -630,7 +802,6 @@ class SurpriseService {
 
 
         if (!photo) {
-
             throw new Error(
                 'PHOTO_NOT_FOUND'
             );
@@ -658,31 +829,174 @@ class SurpriseService {
             photos
         };
     }
-    // ============================================================
-    // VALIDATION
-    // ============================================================
 
-    static validateData(data) {
 
-        if (!data || typeof data !== 'object') {
-            throw new Error('INVALID_DATA');
+    static async ensureAvailable(
+        surprise
+    ) {
+
+        if (
+            surprise.status ===
+            'DELETED'
+        ) {
+
+            throw new Error(
+                'SURPRISE_NOT_FOUND'
+            );
         }
 
-        // ------------------------------------------------------------
-        // TEMPLATE
-        // ------------------------------------------------------------
 
-        if (typeof data.template !== 'string') {
-            throw new Error('TEMPLATE_REQUIRED');
+        if (
+            surprise.status ===
+                'EXPIRED' ||
+            this.isExpired(
+                surprise
+            )
+        ) {
+
+            if (
+                surprise.status !==
+                'EXPIRED'
+            ) {
+
+                await surprise.update({
+                    status: 'EXPIRED'
+                });
+            }
+
+
+            throw new Error(
+                'SURPRISE_EXPIRED'
+            );
+        }
+    }
+
+
+    static isExpired(
+        surprise
+    ) {
+
+        if (!surprise.expiresAt) {
+            return false;
         }
 
-        if (!data.template.trim()) {
-            throw new Error('TEMPLATE_REQUIRED');
+
+        return (
+            new Date(
+                surprise.expiresAt
+            ) <= new Date()
+        );
+    }
+
+
+    static getExtension(
+        filename
+    ) {
+
+        return filename
+            .split('.')
+            .pop()
+            ?.toLowerCase() ?? '';
+    }
+
+
+    static serializeSurprise(
+        surprise
+    ) {
+
+        return {
+
+            id:
+                surprise.id,
+
+            template:
+                surprise.template,
+
+            recipientName:
+                surprise.recipientName,
+
+            senderName:
+                surprise.senderName,
+
+            email:
+                surprise.email,
+
+            title:
+                surprise.title,
+
+            message:
+                surprise.message,
+
+            photos:
+                surprise.photos || [],
+
+            dynamicData:
+                surprise.dynamicData || {},
+
+            publicToken:
+                surprise.publicToken,
+
+            status:
+                surprise.status,
+
+            createdAt:
+                surprise.createdAt,
+
+            updatedAt:
+                surprise.updatedAt,
+
+            expiresAt:
+                surprise.expiresAt
+        };
+    }
+
+
+    static validateData(
+        data
+    ) {
+
+        if (
+            !data ||
+            typeof data !== 'object' ||
+            Array.isArray(data)
+        ) {
+
+            throw new Error(
+                'INVALID_DATA'
+            );
         }
 
-        if (data.template.length > 100) {
-            throw new Error('INVALID_TEMPLATE');
+
+        if (
+            typeof data.template !==
+            'string'
+        ) {
+
+            throw new Error(
+                'TEMPLATE_REQUIRED'
+            );
         }
+
+
+        if (
+            !data.template.trim()
+        ) {
+
+            throw new Error(
+                'TEMPLATE_REQUIRED'
+            );
+        }
+
+
+        if (
+            data.template.length > 100
+        ) {
+
+            throw new Error(
+                'INVALID_TEMPLATE'
+            );
+        }
+
 
         const AVAILABLE_TEMPLATES = [
             'love-01',
@@ -693,118 +1007,229 @@ class SurpriseService {
             'anniversary-01'
         ];
 
-        if (!AVAILABLE_TEMPLATES.includes(data.template)) {
-            throw new Error('INVALID_TEMPLATE');
+
+        if (
+            !AVAILABLE_TEMPLATES.includes(
+                data.template
+            )
+        ) {
+
+            throw new Error(
+                'INVALID_TEMPLATE'
+            );
         }
 
 
-        // ------------------------------------------------------------
-        // RECIPIENT
-        // ------------------------------------------------------------
+        if (
+            typeof data.recipientName !==
+            'string'
+        ) {
 
-        if (typeof data.recipientName !== 'string') {
-            throw new Error('INVALID_RECIPIENT_NAME');
+            throw new Error(
+                'INVALID_RECIPIENT_NAME'
+            );
         }
 
-        if (!data.recipientName.trim()) {
-            throw new Error('RECIPIENT_NAME_REQUIRED');
+
+        if (
+            !data.recipientName.trim()
+        ) {
+
+            throw new Error(
+                'RECIPIENT_NAME_REQUIRED'
+            );
         }
 
-        if (data.recipientName.length > 100) {
-            throw new Error('INVALID_RECIPIENT_NAME');
+
+        if (
+            data.recipientName.length > 100
+        ) {
+
+            throw new Error(
+                'INVALID_RECIPIENT_NAME'
+            );
         }
 
-        // ============================================================
-        // EMAIL
-        // ============================================================
 
-        if (typeof data.email !== 'string') {
-            throw new Error('INVALID_EMAIL');
+        if (
+            typeof data.email !==
+            'string'
+        ) {
+
+            throw new Error(
+                'INVALID_EMAIL'
+            );
         }
 
-        if (!data.email.trim()) {
-            throw new Error('EMAIL_REQUIRED');
+
+        if (
+            !data.email.trim()
+        ) {
+
+            throw new Error(
+                'EMAIL_REQUIRED'
+            );
         }
 
-        if (data.email.length > 255) {
-            throw new Error('INVALID_EMAIL');
+
+        if (
+            data.email.length > 255
+        ) {
+
+            throw new Error(
+                'INVALID_EMAIL'
+            );
         }
+
 
         const emailRegex =
             /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-        if (!emailRegex.test(data.email.trim())) {
-            throw new Error('INVALID_EMAIL');
+
+        if (
+            !emailRegex.test(
+                data.email.trim()
+            )
+        ) {
+
+            throw new Error(
+                'INVALID_EMAIL'
+            );
         }
 
-        // ------------------------------------------------------------
-        // SENDER
-        // ------------------------------------------------------------
 
         if (
             data.senderName !== undefined &&
             data.senderName !== null &&
             typeof data.senderName !== 'string'
         ) {
-            throw new Error('INVALID_SENDER_NAME');
+
+            throw new Error(
+                'INVALID_SENDER_NAME'
+            );
         }
+
 
         if (
-            typeof data.senderName === 'string' &&
+            typeof data.senderName ===
+            'string' &&
             data.senderName.length > 100
         ) {
-            throw new Error('INVALID_SENDER_NAME');
+
+            throw new Error(
+                'INVALID_SENDER_NAME'
+            );
         }
 
 
-        // ------------------------------------------------------------
-        // TITLE
-        // ------------------------------------------------------------
+        if (
+            typeof data.message !==
+            'string'
+        ) {
 
-        // if (typeof data.title !== 'string') {
-        //     throw new Error('INVALID_TITLE');
-        // }
-
-        // if (!data.title.trim()) {
-        //     throw new Error('TITLE_REQUIRED');
-        // }
-
-        // if (data.title.length > 150) {
-        //     throw new Error('INVALID_TITLE');
-        // }
-
-
-        // ------------------------------------------------------------
-        // MESSAGE
-        // ------------------------------------------------------------
-
-        if (typeof data.message !== 'string') {
-            throw new Error('INVALID_MESSAGE');
-        }
-
-        if (!data.message.trim()) {
-            throw new Error('MESSAGE_REQUIRED');
-        }
-
-        if (data.message.length > 10000) {
-            throw new Error('INVALID_MESSAGE');
-        }
-
-        if (data.photos !== undefined && data.photos !== null && !Array.isArray(data.photos)) {
-            throw new Error('INVALID_PHOTOS');
-        }
-
-        if (Array.isArray(data.photos) && data.photos.length > 3) {
-            throw new Error('TOO_MANY_PHOTOS');
+            throw new Error(
+                'INVALID_MESSAGE'
+            );
         }
 
 
-        if (data.dynamicData !== undefined && data.dynamicData !== null && 
-            (typeof data.dynamicData !== 'object' || Array.isArray(data.dynamicData))) {
-            throw new Error('INVALID_DYNAMIC_DATA');
+        if (
+            !data.message.trim()
+        ) {
+
+            throw new Error(
+                'MESSAGE_REQUIRED'
+            );
         }
+
+
+        if (
+            data.message.length > 10000
+        ) {
+
+            throw new Error(
+                'INVALID_MESSAGE'
+            );
+        }
+
+
+        if (
+            data.photos !== undefined &&
+            data.photos !== null &&
+            !Array.isArray(data.photos)
+        ) {
+
+            throw new Error(
+                'INVALID_PHOTOS'
+            );
+        }
+
+
+        if (
+            Array.isArray(data.photos) &&
+            data.photos.length > 3
+        ) {
+
+            throw new Error(
+                'TOO_MANY_PHOTOS'
+            );
+        }
+
+
+        if (
+            data.dynamicData !== undefined &&
+            data.dynamicData !== null &&
+            (
+                typeof data.dynamicData !==
+                'object' ||
+                Array.isArray(
+                    data.dynamicData
+                )
+            )
+        ) {
+
+            throw new Error(
+                'INVALID_DYNAMIC_DATA'
+            );
+        }
+
+
+        return {
+
+            template:
+                data.template.trim(),
+
+            recipientName:
+                data.recipientName.trim(),
+
+            senderName:
+                typeof data.senderName ===
+                'string'
+                    ? data.senderName.trim() ||
+                      null
+                    : null,
+
+            email:
+                data.email.trim().toLowerCase(),
+
+            title:
+                typeof data.title ===
+                'string'
+                    ? data.title.trim() || null
+                    : null,
+
+            message:
+                data.message.trim(),
+
+            expiresAt:
+                data.expiresAt || null,
+
+            dynamicData:
+                data.dynamicData || {}
+        };
     }
 }
 
 
-module.exports = SurpriseService;
+module.exports =
+    SurpriseService;
