@@ -17,11 +17,21 @@ class PaymentController {
             } = req.params;
 
 
+            const {
+                editToken
+            } = req.body || {};
+
+
+            const userId =
+                req.user?.id ?? null;
+
+
             const result =
                 await PaymentService
                     .createPayment(
                         surpriseId,
-                        req.user.id
+                        userId,
+                        editToken
                     );
 
 
@@ -32,14 +42,17 @@ class PaymentController {
                 data: result
             });
 
-
         } catch (error) {
 
             const statusCodes = {
 
-                USER_REQUIRED: 401,
+                PAYMENT_AUTH_REQUIRED: 401,
 
                 SURPRISE_ID_REQUIRED: 400,
+
+                PAYMENT_ID_REQUIRED: 400,
+
+                TRANSACTION_ID_REQUIRED: 400,
 
                 SURPRISE_NOT_FOUND: 404,
 
@@ -94,11 +107,21 @@ class PaymentController {
             } = req.params;
 
 
+            const editToken =
+                req.query.editToken ||
+                null;
+
+
+            const userId =
+                req.user?.id ?? null;
+
+
             const result =
                 await PaymentService
                     .getPaymentStatus(
                         paymentId,
-                        req.user.id
+                        userId,
+                        editToken
                     );
 
 
@@ -109,12 +132,13 @@ class PaymentController {
                 data: result
             });
 
-
         } catch (error) {
 
             const statusCodes = {
 
-                USER_REQUIRED: 401,
+                PAYMENT_AUTH_REQUIRED: 401,
+
+                PAYMENT_ID_REQUIRED: 400,
 
                 PAYMENT_NOT_FOUND: 404
             };
@@ -164,11 +188,21 @@ class PaymentController {
             } = req.params;
 
 
+            const editToken =
+                req.query.editToken ||
+                null;
+
+
+            const userId =
+                req.user?.id ?? null;
+
+
             const result =
                 await PaymentService
                     .syncWompiTransaction(
                         transactionId,
-                        req.user.id
+                        userId,
+                        editToken
                     );
 
 
@@ -179,12 +213,13 @@ class PaymentController {
                 data: result
             });
 
-
         } catch (error) {
 
             const statusCodes = {
 
-                USER_REQUIRED: 401,
+                PAYMENT_AUTH_REQUIRED: 401,
+
+                TRANSACTION_ID_REQUIRED: 400,
 
                 PAYMENT_NOT_FOUND: 404,
 
@@ -253,7 +288,6 @@ class PaymentController {
              */
 
             return res.sendStatus(200);
-
 
         } catch (error) {
 

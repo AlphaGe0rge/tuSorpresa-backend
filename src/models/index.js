@@ -7,14 +7,24 @@ const Payment = require('./payment.model');
 |--------------------------------------------------------------------------
 | USER → SURPRISE
 |--------------------------------------------------------------------------
+|
+| Un usuario puede tener muchas sorpresas.
+|
+| userId puede ser NULL porque una sorpresa también
+| puede ser creada por un usuario invitado.
+|
+| Si posteriormente se elimina el usuario,
+| NO eliminamos sus sorpresas.
+|
 */
 
 User.hasMany(Surprise, {
     foreignKey: 'userId',
     as: 'surprises',
-    onDelete: 'CASCADE',
+    onDelete: 'SET NULL',
     onUpdate: 'CASCADE'
 });
+
 
 Surprise.belongsTo(User, {
     foreignKey: 'userId',
@@ -26,6 +36,10 @@ Surprise.belongsTo(User, {
 |--------------------------------------------------------------------------
 | SURPRISE → PAYMENT
 |--------------------------------------------------------------------------
+|
+| Una sorpresa puede tener uno o varios registros
+| de pago asociados.
+|
 */
 
 Surprise.hasMany(Payment, {
@@ -35,11 +49,18 @@ Surprise.hasMany(Payment, {
     onUpdate: 'CASCADE'
 });
 
+
 Payment.belongsTo(Surprise, {
     foreignKey: 'surpriseId',
     as: 'surprise'
 });
 
+
+/*
+|--------------------------------------------------------------------------
+| EXPORTS
+|--------------------------------------------------------------------------
+*/
 
 module.exports = {
     User,

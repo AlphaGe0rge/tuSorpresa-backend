@@ -6,45 +6,72 @@ const PaymentController =
 const authMiddleware =
     require('../middleware/auth.middleware');
 
+const optionalAuthMiddleware =
+    require('../middleware/optional-auth.middleware');
+
 
 const router =
     express.Router();
 
 
 // ============================================================
-// AUTHENTICATED
+// CREATE PAYMENT
 // ============================================================
 
-
-// Crear pago de una sorpresa
+// Usuario registrado:
+//    JWT
+//
+// Invitado:
+//    editToken en body
+//
 router.post(
     '/surprises/:surpriseId',
-    authMiddleware,
+    optionalAuthMiddleware,
     PaymentController.create
 );
 
 
-// Consultar estado de un pago
+// ============================================================
+// GET PAYMENT STATUS
+// ============================================================
+
+// Usuario registrado:
+//    JWT
+//
+// Invitado:
+//    ?editToken=...
+//
 router.get(
     '/:paymentId',
-    authMiddleware,
+    optionalAuthMiddleware,
     PaymentController.getStatus
 );
 
 
-// Sincronizar transacción después
-// de regresar desde Wompi
+// ============================================================
+// SYNC WOMPI TRANSACTION
+// ============================================================
+
+// Usuario registrado:
+//    JWT
+//
+// Invitado:
+//    ?editToken=...
+//
 router.get(
     '/wompi/transaction/:transactionId',
-    authMiddleware,
+    optionalAuthMiddleware,
     PaymentController.syncTransaction
 );
 
 
 // ============================================================
-// WEBHOOK
+// WOMPI WEBHOOK
 // ============================================================
 
+// Público.
+// La seguridad la proporciona la firma
+// del webhook de Wompi.
 router.post(
     '/wompi/webhook',
     PaymentController.wompiWebhook

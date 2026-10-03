@@ -12,6 +12,11 @@ const EmailService =
 
 class SurpriseService {
 
+
+    // ============================================================
+    // TOKEN
+    // ============================================================
+
     static generateToken() {
 
         return crypto
@@ -19,6 +24,10 @@ class SurpriseService {
             .toString('hex');
     }
 
+
+    // ============================================================
+    // HASH EDIT TOKEN
+    // ============================================================
 
     static hashEditToken(token) {
 
@@ -29,29 +38,68 @@ class SurpriseService {
     }
 
 
-    static async create(data, userId) {
+    // ============================================================
+    // CREATE
+    // ============================================================
+
+    static async create(
+        data,
+        userId = null
+    ) {
 
         this.validateData(data);
 
-        if (!userId) {
-            throw new Error('USER_REQUIRED');
-        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | USER ID
+        |--------------------------------------------------------------------------
+        |
+        | Puede ser:
+        |
+        | Usuario autenticado:
+        |     UUID
+        |
+        | Invitado:
+        |     null
+        |
+        */
+
+        const normalizedUserId =
+            userId || null;
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | TOKENS
+        |--------------------------------------------------------------------------
+        */
 
         const publicToken =
             this.generateToken();
 
+
         const editToken =
             this.generateToken();
+
 
         const editTokenHash =
             this.hashEditToken(
                 editToken
             );
 
+
+        /*
+        |--------------------------------------------------------------------------
+        | CREATE SURPRISE
+        |--------------------------------------------------------------------------
+        */
+
         const surprise =
             await Surprise.create({
 
-                userId,
+                userId:
+                    normalizedUserId,
 
                 template:
                     data.template,
@@ -83,9 +131,21 @@ class SurpriseService {
                 expiresAt:
                     data.expiresAt || null,
 
-                status: 'ACTIVE'
+                status:
+                    'ACTIVE'
+
             });
 
+
+        /*
+        |--------------------------------------------------------------------------
+        | SEND EMAIL
+        |--------------------------------------------------------------------------
+        |
+        | Tanto usuarios registrados como invitados
+        | reciben la información de su sorpresa.
+        |
+        */
 
         try {
 
@@ -105,12 +165,30 @@ class SurpriseService {
 
         } catch (error) {
 
+            /*
+            |--------------------------------------------------------------------------
+            | IMPORTANT
+            |--------------------------------------------------------------------------
+            |
+            | La sorpresa ya fue creada correctamente.
+            |
+            | Un error de correo no debe eliminar
+            | ni invalidar la sorpresa.
+            |
+            */
+
             console.error(
                 'Unable to send surprise email:',
                 error
             );
         }
 
+
+        /*
+        |--------------------------------------------------------------------------
+        | RESPONSE
+        |--------------------------------------------------------------------------
+        */
 
         return {
 
@@ -125,11 +203,19 @@ class SurpriseService {
     }
 
 
+    // ============================================================
+    // GET USER SURPRISES
+    // ============================================================
+
     static async getByUserId(userId) {
 
         if (!userId) {
-            throw new Error('USER_REQUIRED');
+
+            throw new Error(
+                'USER_REQUIRED'
+            );
         }
+
 
         const surprises =
             await Surprise.findAll({
@@ -139,20 +225,30 @@ class SurpriseService {
                 },
 
                 order: [
-                    ['createdAt', 'DESC']
+                    [
+                        'createdAt',
+                        'DESC'
+                    ]
                 ],
 
                 attributes: {
+
                     exclude: [
                         'editTokenHash'
                     ]
+
                 }
 
             });
 
+
         return surprises;
     }
 
+
+    // ============================================================
+    // GET MY SURPRISE BY ID
+    // ============================================================
 
     static async getMyById(
         surpriseId,
@@ -160,31 +256,46 @@ class SurpriseService {
     ) {
 
         if (!userId) {
-            throw new Error('USER_REQUIRED');
+
+            throw new Error(
+                'USER_REQUIRED'
+            );
         }
 
+
         if (!surpriseId) {
-            throw new Error('SURPRISE_NOT_FOUND');
+
+            throw new Error(
+                'SURPRISE_NOT_FOUND'
+            );
         }
+
 
         const surprise =
             await Surprise.findOne({
 
                 where: {
-                    id: surpriseId,
+
+                    id:
+                        surpriseId,
+
                     userId
+
                 },
 
                 attributes: {
+
                     exclude: [
                         'editTokenHash'
                     ]
+
                 }
 
             });
 
 
         if (!surprise) {
+
             throw new Error(
                 'SURPRISE_NOT_FOUND'
             );
@@ -200,6 +311,10 @@ class SurpriseService {
     }
 
 
+    // ============================================================
+    // UPDATE MY SURPRISE
+    // ============================================================
+
     static async updateMyById(
         surpriseId,
         userId,
@@ -207,27 +322,38 @@ class SurpriseService {
     ) {
 
         if (!userId) {
-            throw new Error('USER_REQUIRED');
+
+            throw new Error(
+                'USER_REQUIRED'
+            );
         }
 
+
         if (!surpriseId) {
+
             throw new Error(
                 'SURPRISE_NOT_FOUND'
             );
         }
 
+
         const surprise =
             await Surprise.findOne({
 
                 where: {
-                    id: surpriseId,
+
+                    id:
+                        surpriseId,
+
                     userId
+
                 }
 
             });
 
 
         if (!surprise) {
+
             throw new Error(
                 'SURPRISE_NOT_FOUND'
             );
@@ -240,7 +366,9 @@ class SurpriseService {
 
 
         const validated =
-            this.validateData(data);
+            this.validateData(
+                data
+            );
 
 
         await surprise.update({
@@ -278,7 +406,13 @@ class SurpriseService {
     }
 
 
-    static async getPublic(publicToken) {
+    // ============================================================
+    // GET PUBLIC SURPRISE
+    // ============================================================
+
+    static async getPublic(
+        publicToken
+    ) {
 
         const surprise =
             await Surprise.findOne({
@@ -288,29 +422,53 @@ class SurpriseService {
                 },
 
                 attributes: [
+
                     'id',
+
                     'template',
+
                     'recipientName',
+
                     'senderName',
+
                     'title',
+
                     'message',
+
                     'photos',
+
                     'dynamicData',
+
                     'createdAt',
+
                     'updatedAt',
+
                     'expiresAt',
+
                     'status'
+
                 ]
 
             });
 
 
         if (!surprise) {
+
             throw new Error(
                 'SURPRISE_NOT_FOUND'
             );
         }
 
+
+        /*
+        |--------------------------------------------------------------------------
+        | PENDING PAYMENT
+        |--------------------------------------------------------------------------
+        |
+        | Una sorpresa pendiente de pago no debe
+        | poder visualizarse públicamente.
+        |
+        */
 
         if (
             surprise.status ===
@@ -332,15 +490,21 @@ class SurpriseService {
     }
 
 
+    // ============================================================
+    // GET BY EDIT TOKEN
+    // ============================================================
+
     static async getByEditToken(
         editToken
     ) {
 
         if (!editToken) {
+
             throw new Error(
                 'SURPRISE_NOT_FOUND'
             );
         }
+
 
         const editTokenHash =
             this.hashEditToken(
@@ -359,6 +523,7 @@ class SurpriseService {
 
 
         if (!surprise) {
+
             throw new Error(
                 'SURPRISE_NOT_FOUND'
             );
@@ -376,12 +541,17 @@ class SurpriseService {
     }
 
 
+    // ============================================================
+    // UPDATE BY EDIT TOKEN
+    // ============================================================
+
     static async updateByEditToken(
         editToken,
         data
     ) {
 
         if (!editToken) {
+
             throw new Error(
                 'SURPRISE_NOT_FOUND'
             );
@@ -405,6 +575,7 @@ class SurpriseService {
 
 
         if (!surprise) {
+
             throw new Error(
                 'SURPRISE_NOT_FOUND'
             );
@@ -417,7 +588,9 @@ class SurpriseService {
 
 
         const validated =
-            this.validateData(data);
+            this.validateData(
+                data
+            );
 
 
         await surprise.update({
@@ -455,6 +628,10 @@ class SurpriseService {
     }
 
 
+    // ============================================================
+    // UPLOAD PHOTOS BY USER
+    // ============================================================
+
     static async uploadPhotosByUser(
         surpriseId,
         userId,
@@ -462,8 +639,12 @@ class SurpriseService {
     ) {
 
         if (!userId) {
-            throw new Error('USER_REQUIRED');
+
+            throw new Error(
+                'USER_REQUIRED'
+            );
         }
+
 
         const surprise =
             await this.findOwnedSurprise(
@@ -471,12 +652,17 @@ class SurpriseService {
                 userId
             );
 
+
         return this.uploadPhotosToSurprise(
             surprise,
             files
         );
     }
 
+
+    // ============================================================
+    // DELETE PHOTO BY USER
+    // ============================================================
 
     static async deletePhotoByUser(
         surpriseId,
@@ -485,14 +671,19 @@ class SurpriseService {
     ) {
 
         if (!userId) {
-            throw new Error('USER_REQUIRED');
+
+            throw new Error(
+                'USER_REQUIRED'
+            );
         }
+
 
         const surprise =
             await this.findOwnedSurprise(
                 surpriseId,
                 userId
             );
+
 
         return this.deletePhotoFromSurprise(
             surprise,
@@ -501,12 +692,17 @@ class SurpriseService {
     }
 
 
+    // ============================================================
+    // UPLOAD PHOTOS BY EDIT TOKEN
+    // ============================================================
+
     static async uploadPhotos(
         editToken,
         files
     ) {
 
         if (!editToken) {
+
             throw new Error(
                 'SURPRISE_NOT_FOUND'
             );
@@ -530,6 +726,7 @@ class SurpriseService {
 
 
         if (!surprise) {
+
             throw new Error(
                 'SURPRISE_NOT_FOUND'
             );
@@ -543,12 +740,17 @@ class SurpriseService {
     }
 
 
+    // ============================================================
+    // DELETE PHOTO BY EDIT TOKEN
+    // ============================================================
+
     static async deletePhoto(
         editToken,
         photoKey
     ) {
 
         if (!editToken) {
+
             throw new Error(
                 'SURPRISE_NOT_FOUND'
             );
@@ -572,6 +774,7 @@ class SurpriseService {
 
 
         if (!surprise) {
+
             throw new Error(
                 'SURPRISE_NOT_FOUND'
             );
@@ -585,12 +788,17 @@ class SurpriseService {
     }
 
 
+    // ============================================================
+    // FIND OWNED SURPRISE
+    // ============================================================
+
     static async findOwnedSurprise(
         surpriseId,
         userId
     ) {
 
         if (!surpriseId) {
+
             throw new Error(
                 'SURPRISE_NOT_FOUND'
             );
@@ -601,14 +809,19 @@ class SurpriseService {
             await Surprise.findOne({
 
                 where: {
-                    id: surpriseId,
+
+                    id:
+                        surpriseId,
+
                     userId
+
                 }
 
             });
 
 
         if (!surprise) {
+
             throw new Error(
                 'SURPRISE_NOT_FOUND'
             );
@@ -623,6 +836,10 @@ class SurpriseService {
         return surprise;
     }
 
+
+    // ============================================================
+    // UPLOAD PHOTOS
+    // ============================================================
 
     static async uploadPhotosToSurprise(
         surprise,
@@ -640,7 +857,9 @@ class SurpriseService {
         }
 
 
-        if (files.length > 3) {
+        if (
+            files.length > 3
+        ) {
 
             throw new Error(
                 'TOO_MANY_PHOTOS'
@@ -695,7 +914,9 @@ class SurpriseService {
                         'png',
                         'webp',
                         'gif'
-                    ].includes(extension)
+                    ].includes(
+                        extension
+                    )
                 ) {
 
                     throw new Error(
@@ -741,11 +962,17 @@ class SurpriseService {
                 photos
             };
 
+
         } catch (error) {
 
+            /*
+            |--------------------------------------------------------------------------
+            | ROLLBACK R2
+            |--------------------------------------------------------------------------
+            */
+
             for (
-                const photo
-                of uploadedPhotos
+                const photo of uploadedPhotos
             ) {
 
                 try {
@@ -769,12 +996,17 @@ class SurpriseService {
     }
 
 
+    // ============================================================
+    // DELETE PHOTO
+    // ============================================================
+
     static async deletePhotoFromSurprise(
         surprise,
         photoKey
     ) {
 
         if (!photoKey) {
+
             throw new Error(
                 'PHOTO_NOT_FOUND'
             );
@@ -802,6 +1034,7 @@ class SurpriseService {
 
 
         if (!photo) {
+
             throw new Error(
                 'PHOTO_NOT_FOUND'
             );
@@ -830,6 +1063,10 @@ class SurpriseService {
         };
     }
 
+
+    // ============================================================
+    // ENSURE AVAILABLE
+    // ============================================================
 
     static async ensureAvailable(
         surprise
@@ -872,11 +1109,16 @@ class SurpriseService {
     }
 
 
+    // ============================================================
+    // IS EXPIRED
+    // ============================================================
+
     static isExpired(
         surprise
     ) {
 
         if (!surprise.expiresAt) {
+
             return false;
         }
 
@@ -889,6 +1131,10 @@ class SurpriseService {
     }
 
 
+    // ============================================================
+    // GET EXTENSION
+    // ============================================================
+
     static getExtension(
         filename
     ) {
@@ -899,6 +1145,10 @@ class SurpriseService {
             ?.toLowerCase() ?? '';
     }
 
+
+    // ============================================================
+    // SERIALIZE
+    // ============================================================
 
     static serializeSurprise(
         surprise
@@ -947,9 +1197,14 @@ class SurpriseService {
 
             expiresAt:
                 surprise.expiresAt
+
         };
     }
 
+
+    // ============================================================
+    // VALIDATE DATA
+    // ============================================================
 
     static validateData(
         data
@@ -966,6 +1221,12 @@ class SurpriseService {
             );
         }
 
+
+        /*
+        |--------------------------------------------------------------------------
+        | TEMPLATE
+        |--------------------------------------------------------------------------
+        */
 
         if (
             typeof data.template !==
@@ -999,12 +1260,19 @@ class SurpriseService {
 
 
         const AVAILABLE_TEMPLATES = [
+
             'love-01',
+
             'love-02',
+
             'birthday-01',
+
             'friendship-01',
+
             'invitation-01',
+
             'anniversary-01'
+
         ];
 
 
@@ -1019,6 +1287,12 @@ class SurpriseService {
             );
         }
 
+
+        /*
+        |--------------------------------------------------------------------------
+        | RECIPIENT
+        |--------------------------------------------------------------------------
+        */
 
         if (
             typeof data.recipientName !==
@@ -1050,6 +1324,12 @@ class SurpriseService {
             );
         }
 
+
+        /*
+        |--------------------------------------------------------------------------
+        | EMAIL
+        |--------------------------------------------------------------------------
+        */
 
         if (
             typeof data.email !==
@@ -1098,6 +1378,12 @@ class SurpriseService {
         }
 
 
+        /*
+        |--------------------------------------------------------------------------
+        | SENDER
+        |--------------------------------------------------------------------------
+        */
+
         if (
             data.senderName !== undefined &&
             data.senderName !== null &&
@@ -1121,6 +1407,12 @@ class SurpriseService {
             );
         }
 
+
+        /*
+        |--------------------------------------------------------------------------
+        | MESSAGE
+        |--------------------------------------------------------------------------
+        */
 
         if (
             typeof data.message !==
@@ -1153,10 +1445,18 @@ class SurpriseService {
         }
 
 
+        /*
+        |--------------------------------------------------------------------------
+        | PHOTOS
+        |--------------------------------------------------------------------------
+        */
+
         if (
             data.photos !== undefined &&
             data.photos !== null &&
-            !Array.isArray(data.photos)
+            !Array.isArray(
+                data.photos
+            )
         ) {
 
             throw new Error(
@@ -1166,7 +1466,9 @@ class SurpriseService {
 
 
         if (
-            Array.isArray(data.photos) &&
+            Array.isArray(
+                data.photos
+            ) &&
             data.photos.length > 3
         ) {
 
@@ -1175,6 +1477,12 @@ class SurpriseService {
             );
         }
 
+
+        /*
+        |--------------------------------------------------------------------------
+        | DYNAMIC DATA
+        |--------------------------------------------------------------------------
+        */
 
         if (
             data.dynamicData !== undefined &&
@@ -1193,6 +1501,12 @@ class SurpriseService {
             );
         }
 
+
+        /*
+        |--------------------------------------------------------------------------
+        | NORMALIZED DATA
+        |--------------------------------------------------------------------------
+        */
 
         return {
 
@@ -1226,6 +1540,7 @@ class SurpriseService {
 
             dynamicData:
                 data.dynamicData || {}
+
         };
     }
 }

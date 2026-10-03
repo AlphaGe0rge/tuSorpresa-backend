@@ -11,16 +11,38 @@ const Surprise = sequelize.define(
             allowNull: false
         },
 
+        /*
+        |--------------------------------------------------------------------------
+        | OWNER
+        |--------------------------------------------------------------------------
+        |
+        | Puede ser NULL porque una sorpresa puede ser creada
+        | por un usuario invitado.
+        |
+        */
+
         userId: {
             type: DataTypes.UUID,
-            allowNull: false,
+            allowNull: true,
             field: 'user_id'
         },
+
+        /*
+        |--------------------------------------------------------------------------
+        | TEMPLATE
+        |--------------------------------------------------------------------------
+        */
 
         template: {
             type: DataTypes.STRING(100),
             allowNull: false
         },
+
+        /*
+        |--------------------------------------------------------------------------
+        | TOKENS
+        |--------------------------------------------------------------------------
+        */
 
         publicToken: {
             type: DataTypes.STRING(64),
@@ -34,6 +56,12 @@ const Surprise = sequelize.define(
             allowNull: false,
             field: 'edit_token_hash'
         },
+
+        /*
+        |--------------------------------------------------------------------------
+        | CONTENT
+        |--------------------------------------------------------------------------
+        */
 
         recipientName: {
             type: DataTypes.STRING(100),
@@ -56,20 +84,56 @@ const Surprise = sequelize.define(
             type: DataTypes.TEXT,
             allowNull: true
         },
+
+        /*
+        |--------------------------------------------------------------------------
+        | CONTACT
+        |--------------------------------------------------------------------------
+        |
+        | Este es el correo utilizado para enviar al creador
+        | la información relacionada con su sorpresa.
+        |
+        | También nos permite posteriormente encontrar
+        | sorpresas creadas como invitado cuando el usuario
+        | verifica su cuenta.
+        |
+        */
+
         email: {
             type: DataTypes.STRING(255),
             allowNull: false
         },
+
+        /*
+        |--------------------------------------------------------------------------
+        | MEDIA
+        |--------------------------------------------------------------------------
+        */
+
         photos: {
             type: DataTypes.JSON,
             allowNull: false,
             defaultValue: []
         },
+
+        /*
+        |--------------------------------------------------------------------------
+        | TEMPLATE DYNAMIC DATA
+        |--------------------------------------------------------------------------
+        */
+
         dynamicData: {
             type: DataTypes.JSON,
             allowNull: false,
             defaultValue: {}
         },
+
+        /*
+        |--------------------------------------------------------------------------
+        | STATUS
+        |--------------------------------------------------------------------------
+        */
+
         status: {
             type: DataTypes.ENUM(
                 'PENDING_PAYMENT',
@@ -78,9 +142,14 @@ const Surprise = sequelize.define(
                 'DISABLED'
             ),
             allowNull: false,
-            // defaultValue: 'PENDING_PAYMENT'
-            defaultValue: 'ACTIVE'
+            defaultValue: 'PENDING_PAYMENT'
         },
+
+        /*
+        |--------------------------------------------------------------------------
+        | DATES
+        |--------------------------------------------------------------------------
+        */
 
         createdAt: {
             type: DataTypes.DATE,

@@ -44,15 +44,9 @@ class PaymentService {
 
     static async createPayment(
         surpriseId,
-        userId
+        userId = null,
+        editToken = null
     ) {
-
-        if (!userId) {
-            throw new Error(
-                'USER_REQUIRED'
-            );
-        }
-
 
         if (!surpriseId) {
             throw new Error(
@@ -61,13 +55,14 @@ class PaymentService {
         }
 
 
+        // --------------------------------------------------------
+        // Buscar sorpresa
+        // --------------------------------------------------------
+
         const surprise =
-            await Surprise.findOne({
-                where: {
-                    id: surpriseId,
-                    userId
-                }
-            });
+            await Surprise.findByPk(
+                surpriseId
+            );
 
 
         if (!surprise) {
@@ -76,6 +71,21 @@ class PaymentService {
             );
         }
 
+
+        // --------------------------------------------------------
+        // Authorization
+        // --------------------------------------------------------
+
+        await this.authorizeSurpriseAccess({
+            surprise,
+            userId,
+            editToken
+        });
+
+
+        // --------------------------------------------------------
+        // Estado
+        // --------------------------------------------------------
 
         if (
             surprise.status === 'ACTIVE'
@@ -95,6 +105,10 @@ class PaymentService {
         }
 
 
+        // --------------------------------------------------------
+        // Price
+        // --------------------------------------------------------
+
         /*
          * El precio SIEMPRE sale del backend.
          *
@@ -109,9 +123,17 @@ class PaymentService {
             priceCop * 100;
 
 
+        // --------------------------------------------------------
+        // Reference
+        // --------------------------------------------------------
+
         const reference =
             `SURPRISE-${surprise.id}-${crypto.randomUUID()}`;
 
+
+        // --------------------------------------------------------
+        // Integrity signature
+        // --------------------------------------------------------
 
         const signature =
             WompiService.generateIntegritySignature({
@@ -120,6 +142,10 @@ class PaymentService {
                 currency: 'COP'
             });
 
+
+        // --------------------------------------------------------
+        // Create payment
+        // --------------------------------------------------------
 
         const payment =
             await Payment.create({
@@ -141,6 +167,10 @@ class PaymentService {
                     'PENDING'
             });
 
+
+        // --------------------------------------------------------
+        // Response
+        // --------------------------------------------------------
 
         return {
 
@@ -166,23 +196,82 @@ class PaymentService {
 
 
     // ============================================================
+    // AUTHORIZE SURPRISE ACCESS
+    // ============================================================
+
+    static async authorizeSurpriseAccess({
+        surprise,
+        userId = null,
+        editToken = null
+    }) {
+
+        // --------------------------------------------------------
+        // Registered user
+        // --------------------------------------------------------
+
+        if (userId) {
+
+            if (
+                surprise.userId !== userId
+            ) {
+                throw new Error(
+                    'SURPRISE_NOT_FOUND'
+                );
+            }
+
+            return true;
+        }
+
+
+        // --------------------------------------------------------
+        // Guest
+        // --------------------------------------------------------
+
+        if (!editToken) {
+            throw new Error(
+                'PAYMENT_AUTH_REQUIRED'
+            );
+        }
+
+
+        const validToken =
+            await Surprise.verifyEditToken(
+                editToken,
+                surprise.editTokenHash
+            );
+
+
+        if (!validToken) {
+            throw new Error(
+                'PAYMENT_AUTH_REQUIRED'
+            );
+        }
+
+
+        return true;
+    }
+
+
+    // ============================================================
     // GET PAYMENT STATUS
     // ============================================================
 
     static async getPaymentStatus(
         paymentId,
-        userId
+        userId = null,
+        editToken = null
     ) {
 
-        if (!userId) {
+        if (!paymentId) {
             throw new Error(
-                'USER_REQUIRED'
+                'PAYMENT_ID_REQUIRED'
             );
         }
 
 
         const payment =
             await Payment.findOne({
+
                 where: {
                     id: paymentId
                 },
@@ -190,17 +279,7 @@ class PaymentService {
                 include: [
                     {
                         model: Surprise,
-                        as: 'surprise',
-
-                        where: {
-                            userId
-                        },
-
-                        attributes: [
-                            'id',
-                            'status',
-                            'publicToken'
-                        ]
+                        as: 'surprise'
                     }
                 ]
             });
@@ -211,6 +290,17 @@ class PaymentService {
                 'PAYMENT_NOT_FOUND'
             );
         }
+
+
+        // --------------------------------------------------------
+        // Authorization
+        // --------------------------------------------------------
+
+        await this.authorizeSurpriseAccess({
+            surprise: payment.surprise,
+            userId,
+            editToken
+        });
 
 
         return this.toStatusResponse(
@@ -225,8 +315,16 @@ class PaymentService {
 
     static async syncWompiTransaction(
         transactionId,
-        userId = null
+        userId = null,
+        editToken = null
     ) {
+
+        if (!transactionId) {
+            throw new Error(
+                'TRANSACTION_ID_REQUIRED'
+            );
+        }
+
 
         const transaction =
             await WompiService.getTransaction(
@@ -243,6 +341,7 @@ class PaymentService {
 
         const payment =
             await Payment.findOne({
+
                 where: {
                     reference:
                         transaction.reference
@@ -264,15 +363,20 @@ class PaymentService {
         }
 
 
-        if (
-            userId &&
-            payment.surprise.userId !== userId
-        ) {
-            throw new Error(
-                'PAYMENT_NOT_FOUND'
-            );
-        }
+        // --------------------------------------------------------
+        // Authorization
+        // --------------------------------------------------------
 
+        await this.authorizeSurpriseAccess({
+            surprise: payment.surprise,
+            userId,
+            editToken
+        });
+
+
+        // --------------------------------------------------------
+        // Apply transaction
+        // --------------------------------------------------------
 
         await this.applyTransaction(
             payment,
@@ -280,7 +384,14 @@ class PaymentService {
         );
 
 
-        await payment.reload();
+        await payment.reload({
+            include: [
+                {
+                    model: Surprise,
+                    as: 'surprise'
+                }
+            ]
+        });
 
 
         return this.toStatusResponse(
@@ -306,10 +417,9 @@ class PaymentService {
         }
 
 
-        /*
-         * Verificamos que el ambiente
-         * recibido corresponda al actual.
-         */
+        // --------------------------------------------------------
+        // Environment
+        // --------------------------------------------------------
 
         const expectedEnvironment =
             process.env.WOMPI_ENV ===
@@ -330,6 +440,10 @@ class PaymentService {
         }
 
 
+        // --------------------------------------------------------
+        // Event signature
+        // --------------------------------------------------------
+
         const validSignature =
             WompiService
                 .validateEventSignature(
@@ -344,10 +458,9 @@ class PaymentService {
         }
 
 
-        /*
-         * El header y el body
-         * contienen el mismo checksum.
-         */
+        // --------------------------------------------------------
+        // Header signature
+        // --------------------------------------------------------
 
         if (
             !WompiService
@@ -356,11 +469,16 @@ class PaymentService {
                     headerChecksum
                 )
         ) {
+
             throw new Error(
                 'INVALID_WOMPI_HEADER_SIGNATURE'
             );
         }
 
+
+        // --------------------------------------------------------
+        // Transaction
+        // --------------------------------------------------------
 
         const transaction =
             event.data?.transaction;
@@ -373,8 +491,13 @@ class PaymentService {
         }
 
 
+        // --------------------------------------------------------
+        // Local payment
+        // --------------------------------------------------------
+
         const payment =
             await Payment.findOne({
+
                 where: {
                     reference:
                         transaction.reference
@@ -404,6 +527,10 @@ class PaymentService {
         }
 
 
+        // --------------------------------------------------------
+        // Apply transaction
+        // --------------------------------------------------------
+
         await this.applyTransaction(
             payment,
             transaction
@@ -425,6 +552,10 @@ class PaymentService {
          * en status.
          */
 
+        // --------------------------------------------------------
+        // Currency
+        // --------------------------------------------------------
+
         if (
             transaction.currency !==
             payment.currency
@@ -435,6 +566,10 @@ class PaymentService {
             );
         }
 
+
+        // --------------------------------------------------------
+        // Amount
+        // --------------------------------------------------------
 
         if (
             Number(
@@ -451,6 +586,10 @@ class PaymentService {
         }
 
 
+        // --------------------------------------------------------
+        // Reference
+        // --------------------------------------------------------
+
         if (
             transaction.reference !==
             payment.reference
@@ -465,6 +604,10 @@ class PaymentService {
         const previousStatus =
             payment.status;
 
+
+        // --------------------------------------------------------
+        // Update payment
+        // --------------------------------------------------------
 
         payment.wompiTransactionId =
             transaction.id;
@@ -481,6 +624,10 @@ class PaymentService {
             null;
 
 
+        // --------------------------------------------------------
+        // APPROVED
+        // --------------------------------------------------------
+
         if (
             transaction.status ===
             'APPROVED'
@@ -490,13 +637,13 @@ class PaymentService {
                 payment.paidAt ||
                 new Date();
 
+
             await payment.save();
 
 
-            /*
-             * Solo activamos si realmente
-             * el pago fue aprobado.
-             */
+            // ----------------------------------------------------
+            // Activate surprise
+            // ----------------------------------------------------
 
             if (
                 payment.surprise.status !==
@@ -509,6 +656,10 @@ class PaymentService {
                 });
             }
 
+
+            // ----------------------------------------------------
+            // Email
+            // ----------------------------------------------------
 
             /*
              * Evitamos enviar nuevamente
@@ -537,7 +688,8 @@ class PaymentService {
                                 payment.surprise
                                     .publicToken,
 
-                            editToken: null
+                            editToken:
+                                null
                         });
 
                 } catch (error) {
@@ -550,6 +702,10 @@ class PaymentService {
             }
 
         } else {
+
+            // ----------------------------------------------------
+            // Other statuses
+            // ----------------------------------------------------
 
             await payment.save();
 
@@ -624,4 +780,5 @@ class PaymentService {
 }
 
 
-module.exports = PaymentService;
+module.exports =
+    PaymentService;
