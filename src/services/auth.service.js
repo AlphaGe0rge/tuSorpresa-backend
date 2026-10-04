@@ -2,6 +2,10 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 const {
+    OAuth2Client
+} = require('google-auth-library');
+
+const {
     User,
     Surprise
 } = require('../models');
@@ -13,15 +17,12 @@ const {
 const EmailService =
     require('./email.service');
 
+const googleClient =
+    new OAuth2Client(
+        process.env.GOOGLE_CLIENT_ID
+    );
 
 class AuthService {
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | REGISTER
-    |--------------------------------------------------------------------------
-    */
 
     async register({
         name,
@@ -34,20 +35,12 @@ class AuthService {
                 .trim()
                 .toLowerCase();
 
-
-        /*
-        |--------------------------------------------------------------------------
-        | CHECK EXISTING USER
-        |--------------------------------------------------------------------------
-        */
-
         const existingUser =
             await User.findOne({
                 where: {
                     email: normalizedEmail
                 }
             });
-
 
         if (existingUser) {
 
@@ -61,34 +54,11 @@ class AuthService {
             throw error;
         }
 
-
-        /*
-        |--------------------------------------------------------------------------
-        | PASSWORD
-        |--------------------------------------------------------------------------
-        */
-
         const passwordHash =
             await bcrypt.hash(
                 password,
                 12
             );
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | CREATE USER
-        |--------------------------------------------------------------------------
-        |
-        | Nunca aceptamos roles desde el endpoint
-        | público de registro.
-        |
-        | Todo usuario registrado públicamente
-        | nace como CLIENT.
-        |
-        | El correo comienza como NO VERIFICADO.
-        |
-        */
 
         const user =
             await User.create({
@@ -101,6 +71,9 @@ class AuthService {
 
                 passwordHash,
 
+                googleId:
+                    null,
+
                 emailVerified:
                     false,
 
@@ -112,60 +85,16 @@ class AuthService {
 
             });
 
-
-        /*
-        |--------------------------------------------------------------------------
-        | AUTH TOKEN
-        |--------------------------------------------------------------------------
-        |
-        | El usuario puede iniciar sesión inmediatamente
-        | después de registrarse.
-        |
-        | La verificación del correo será un proceso
-        | adicional.
-        |
-        */
-
         const token =
             this.generateToken(user);
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | EMAIL VERIFICATION
-        |--------------------------------------------------------------------------
-        |
-        | Generamos un token independiente del JWT
-        | utilizado para autenticación.
-        |
-        */
 
         const verificationToken =
             this.generateEmailVerificationToken(
                 user
             );
 
-
-        /*
-        |--------------------------------------------------------------------------
-        | SEND VERIFICATION EMAIL
-        |--------------------------------------------------------------------------
-        |
-        | MUY IMPORTANTE:
-        |
-        | Si Resend falla, NO eliminamos al usuario
-        | ni hacemos fallar el registro.
-        |
-        | El usuario ya tiene su cuenta creada.
-        |
-        | Posteriormente podremos implementar
-        | "Reenviar correo de verificación".
-        |
-        */
-
         let verificationEmailSent =
             false;
-
 
         try {
 
@@ -181,10 +110,8 @@ class AuthService {
 
             });
 
-
             verificationEmailSent =
                 true;
-
 
         } catch (error) {
 
@@ -192,20 +119,7 @@ class AuthService {
                 'Error enviando correo de verificación:',
                 error
             );
-
-            /*
-             * No lanzamos el error.
-             *
-             * La cuenta ya fue creada correctamente.
-             */
         }
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | RESPONSE
-        |--------------------------------------------------------------------------
-        */
 
         return {
 
@@ -219,13 +133,6 @@ class AuthService {
         };
     }
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | LOGIN
-    |--------------------------------------------------------------------------
-    */
-
     async login({
         email,
         password
@@ -236,14 +143,12 @@ class AuthService {
                 .trim()
                 .toLowerCase();
 
-
         const user =
             await User.findOne({
                 where: {
                     email: normalizedEmail
                 }
             });
-
 
         if (!user) {
 
@@ -256,13 +161,6 @@ class AuthService {
 
             throw error;
         }
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | USER STATUS
-        |--------------------------------------------------------------------------
-        */
 
         if (
             user.status !== 'ACTIVE'
@@ -278,19 +176,23 @@ class AuthService {
             throw error;
         }
 
+        if (!user.passwordHash) {
 
-        /*
-        |--------------------------------------------------------------------------
-        | PASSWORD
-        |--------------------------------------------------------------------------
-        */
+            const error =
+                new Error(
+                    'Esta cuenta utiliza Google para iniciar sesión.'
+                );
+
+            error.statusCode = 400;
+
+            throw error;
+        }
 
         const validPassword =
             await bcrypt.compare(
                 password,
                 user.passwordHash
             );
-
 
         if (!validPassword) {
 
@@ -304,29 +206,13 @@ class AuthService {
             throw error;
         }
 
-
-        /*
-        |--------------------------------------------------------------------------
-        | LAST LOGIN
-        |--------------------------------------------------------------------------
-        */
-
         user.lastLoginAt =
             new Date();
 
-
         await user.save();
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | AUTH TOKEN
-        |--------------------------------------------------------------------------
-        */
 
         const token =
             this.generateToken(user);
-
 
         return {
 
@@ -338,12 +224,214 @@ class AuthService {
         };
     }
 
+    async googleLogin(
+        credential
+    ) {
 
-    /*
-    |--------------------------------------------------------------------------
-    | GET CURRENT USER
-    |--------------------------------------------------------------------------
-    */
+        if (!credential) {
+
+            const error =
+                new Error(
+                    'La credencial de Google es obligatoria.'
+                );
+
+            error.statusCode = 400;
+
+            throw error;
+        }
+
+        let payload;
+
+        try {
+
+            const ticket =
+                await googleClient.verifyIdToken({
+
+                    idToken:
+                        credential,
+
+                    audience:
+                        process.env.GOOGLE_CLIENT_ID
+
+                });
+
+            payload =
+                ticket.getPayload();
+
+        } catch (error) {
+
+            const authError =
+                new Error(
+                    'No pudimos verificar tu cuenta de Google.'
+                );
+
+            authError.statusCode = 401;
+
+            throw authError;
+        }
+
+        if (
+            !payload ||
+            !payload.sub ||
+            !payload.email
+        ) {
+
+            const error =
+                new Error(
+                    'La cuenta de Google no es válida.'
+                );
+
+            error.statusCode = 401;
+
+            throw error;
+        }
+
+        if (
+            payload.email_verified !== true
+        ) {
+
+            const error =
+                new Error(
+                    'El correo de Google no está verificado.'
+                );
+
+            error.statusCode = 401;
+
+            throw error;
+        }
+
+        const googleId =
+            payload.sub;
+
+        const normalizedEmail =
+            payload.email
+                .trim()
+                .toLowerCase();
+
+        const googleName =
+            typeof payload.name === 'string' &&
+            payload.name.trim()
+                ? payload.name.trim()
+                : normalizedEmail.split('@')[0];
+
+        let user =
+            await User.findOne({
+                where: {
+                    googleId
+                }
+            });
+
+        if (!user) {
+
+            user =
+                await User.findOne({
+                    where: {
+                        email:
+                            normalizedEmail
+                    }
+                });
+
+            if (user) {
+
+                if (
+                    user.googleId &&
+                    user.googleId !== googleId
+                ) {
+
+                    const error =
+                        new Error(
+                            'Este correo ya está asociado a otra cuenta de Google.'
+                        );
+
+                    error.statusCode = 409;
+
+                    throw error;
+                }
+
+                user.googleId =
+                    googleId;
+
+                user.emailVerified =
+                    true;
+
+                await user.save();
+
+            } else {
+
+                user =
+                    await User.create({
+
+                        name:
+                            googleName,
+
+                        email:
+                            normalizedEmail,
+
+                        passwordHash:
+                            null,
+
+                        googleId,
+
+                        emailVerified:
+                            true,
+
+                        roles:
+                            'CLIENT',
+
+                        status:
+                            'ACTIVE'
+
+                    });
+            }
+        }
+
+        if (
+            user.status !== 'ACTIVE'
+        ) {
+
+            const error =
+                new Error(
+                    'El usuario se encuentra deshabilitado.'
+                );
+
+            error.statusCode = 403;
+
+            throw error;
+        }
+
+        if (
+            !user.emailVerified
+        ) {
+
+            user.emailVerified =
+                true;
+        }
+
+        user.lastLoginAt =
+            new Date();
+
+        await user.save();
+
+        const claimedSurprises =
+            await this.claimGuestSurprises(
+                user.id,
+                user.email
+            );
+
+        const token =
+            this.generateToken(user);
+
+        return {
+
+            user:
+                this.toSafeUser(user),
+
+            token,
+
+            claimedSurprises
+
+        };
+    }
 
     async getMe(userId) {
 
@@ -351,7 +439,6 @@ class AuthService {
             await User.findByPk(
                 userId
             );
-
 
         if (!user) {
 
@@ -365,18 +452,10 @@ class AuthService {
             throw error;
         }
 
-
         return this.toSafeUser(
             user
         );
     }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | GENERATE AUTH TOKEN
-    |--------------------------------------------------------------------------
-    */
 
     generateToken(user) {
 
@@ -398,24 +477,11 @@ class AuthService {
         );
     }
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | GENERATE EMAIL VERIFICATION TOKEN
-    |--------------------------------------------------------------------------
-    |
-    | Este token NO es el JWT de autenticación.
-    |
-    | Su único propósito es verificar el correo.
-    |
-    */
-
     generateEmailVerificationToken(user) {
 
         const secret =
             process.env.EMAIL_VERIFICATION_SECRET ||
             process.env.JWT_SECRET;
-
 
         return jwt.sign(
 
@@ -441,21 +507,6 @@ class AuthService {
         );
     }
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | VERIFY EMAIL
-    |--------------------------------------------------------------------------
-    |
-    | Flujo:
-    |
-    | 1. Validar token.
-    | 2. Buscar usuario.
-    | 3. Marcar emailVerified = true.
-    | 4. Reclamar sorpresas creadas como invitado.
-    |
-    */
-
     async verifyEmail(token) {
 
         if (!token) {
@@ -470,15 +521,7 @@ class AuthService {
             throw error;
         }
 
-
         let decoded;
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | VERIFY TOKEN
-        |--------------------------------------------------------------------------
-        */
 
         try {
 
@@ -486,13 +529,11 @@ class AuthService {
                 process.env.EMAIL_VERIFICATION_SECRET ||
                 process.env.JWT_SECRET;
 
-
             decoded =
                 jwt.verify(
                     token,
                     secret
                 );
-
 
         } catch (error) {
 
@@ -505,13 +546,6 @@ class AuthService {
 
             throw verificationError;
         }
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | CHECK TOKEN PURPOSE
-        |--------------------------------------------------------------------------
-        */
 
         if (
             decoded.purpose !==
@@ -528,18 +562,10 @@ class AuthService {
             throw error;
         }
 
-
-        /*
-        |--------------------------------------------------------------------------
-        | FIND USER
-        |--------------------------------------------------------------------------
-        */
-
         const user =
             await User.findByPk(
                 decoded.sub
             );
-
 
         if (!user) {
 
@@ -553,13 +579,6 @@ class AuthService {
             throw error;
         }
 
-
-        /*
-        |--------------------------------------------------------------------------
-        | VERIFY EMAIL
-        |--------------------------------------------------------------------------
-        */
-
         if (
             !user.emailVerified
         ) {
@@ -570,33 +589,11 @@ class AuthService {
             await user.save();
         }
 
-
-        /*
-        |--------------------------------------------------------------------------
-        | CLAIM GUEST SURPRISES
-        |--------------------------------------------------------------------------
-        |
-        | Ahora buscamos todas las sorpresas que:
-        |
-        | userId IS NULL
-        | email = user.email
-        |
-        | y las asociamos al usuario.
-        |
-        */
-
         const claimedSurprises =
             await this.claimGuestSurprises(
                 user.id,
                 user.email
             );
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | RESPONSE
-        |--------------------------------------------------------------------------
-        */
 
         return {
 
@@ -607,24 +604,6 @@ class AuthService {
 
         };
     }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | CLAIM GUEST SURPRISES
-    |--------------------------------------------------------------------------
-    |
-    | Una sorpresa creada sin cuenta queda inicialmente:
-    |
-    | userId = NULL
-    |
-    | email = correo introducido al crearla
-    |
-    | Cuando el propietario crea una cuenta y verifica
-    | ese mismo correo, las sorpresas pasan a pertenecer
-    | a su cuenta.
-    |
-    */
 
     async claimGuestSurprises(
         userId,
@@ -639,18 +618,10 @@ class AuthService {
             return 0;
         }
 
-
         const normalizedEmail =
             email
                 .trim()
                 .toLowerCase();
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | CLAIM
-        |--------------------------------------------------------------------------
-        */
 
         const [
             updatedCount
@@ -678,20 +649,8 @@ class AuthService {
 
             );
 
-
         return updatedCount;
     }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | SAFE USER
-    |--------------------------------------------------------------------------
-    |
-    | Nunca devolvemos passwordHash
-    | ni información sensible.
-    |
-    */
 
     toSafeUser(user) {
 
@@ -723,9 +682,7 @@ class AuthService {
 
         };
     }
-
 }
-
 
 module.exports =
     new AuthService();

@@ -147,40 +147,20 @@ class SurpriseService {
         |
         */
 
-        try {
-
-            await EmailService.sendSurpriseCreated({
-
-                email:
-                    surprise.email,
-
-                recipientName:
-                    surprise.recipientName,
-
-                publicToken,
-
-                editToken
-
-            });
-
-        } catch (error) {
-
-            /*
-            |--------------------------------------------------------------------------
-            | IMPORTANT
-            |--------------------------------------------------------------------------
-            |
-            | La sorpresa ya fue creada correctamente.
-            |
-            | Un error de correo no debe eliminar
-            | ni invalidar la sorpresa.
-            |
-            */
-
-            console.error(
-                'Unable to send surprise email:',
-                error
-            );
+        if (!normalizedUserId) {
+            try {
+                await EmailService.sendSurpriseCreated({
+                    email: surprise.email,
+                    recipientName: surprise.recipientName,
+                    publicToken,
+                    editToken
+                });
+            } catch (error) {
+                console.error(
+                    'Unable to send surprise email:',
+                    error
+                );
+            }
         }
 
 

@@ -6,16 +6,8 @@ const authController =
 const authMiddleware =
     require('../middleware/auth.middleware');
 
-
 const router =
     express.Router();
-
-
-/*
-|--------------------------------------------------------------------------
-| REGISTER
-|--------------------------------------------------------------------------
-*/
 
 router.post(
     '/register',
@@ -24,13 +16,6 @@ router.post(
     )
 );
 
-
-/*
-|--------------------------------------------------------------------------
-| LOGIN
-|--------------------------------------------------------------------------
-*/
-
 router.post(
     '/login',
     authController.login.bind(
@@ -38,18 +23,12 @@ router.post(
     )
 );
 
-
-/*
-|--------------------------------------------------------------------------
-| VERIFY EMAIL
-|--------------------------------------------------------------------------
-|
-| Este endpoint no requiere autenticación.
-|
-| El usuario llega desde el enlace enviado
-| por correo con un token de verificación.
-|
-*/
+router.post(
+    '/google',
+    authController.google.bind(
+        authController
+    )
+);
 
 router.post(
     '/verify-email',
@@ -58,13 +37,6 @@ router.post(
     )
 );
 
-
-/*
-|--------------------------------------------------------------------------
-| CURRENT USER
-|--------------------------------------------------------------------------
-*/
-
 router.get(
     '/me',
     authMiddleware,
@@ -72,6 +44,5 @@ router.get(
         authController
     )
 );
-
 
 module.exports = router;

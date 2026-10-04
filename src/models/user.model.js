@@ -24,8 +24,15 @@ const User = sequelize.define(
 
         passwordHash: {
             type: DataTypes.STRING(255),
-            allowNull: false,
+            allowNull: true,
             field: 'password_hash'
+        },
+
+        googleId: {
+            type: DataTypes.STRING(255),
+            allowNull: true,
+            unique: true,
+            field: 'google_id'
         },
 
         emailVerified: {

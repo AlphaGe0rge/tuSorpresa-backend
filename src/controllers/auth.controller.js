@@ -1,15 +1,7 @@
 const AuthService =
     require('../services/auth.service');
 
-
 class AuthController {
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | REGISTER
-    |--------------------------------------------------------------------------
-    */
 
     async register(req, res) {
 
@@ -21,20 +13,16 @@ class AuthController {
                 password
             } = req.body;
 
-
             if (
                 !name ||
                 !name.trim()
             ) {
 
                 return res.status(400).json({
-
                     message:
                         'El nombre es obligatorio.'
-
                 });
             }
-
 
             if (
                 !email ||
@@ -42,54 +30,39 @@ class AuthController {
             ) {
 
                 return res.status(400).json({
-
                     message:
                         'El correo es obligatorio.'
-
                 });
             }
-
 
             if (!password) {
 
                 return res.status(400).json({
-
                     message:
                         'La contraseña es obligatoria.'
-
                 });
             }
-
 
             if (
                 password.length < 8
             ) {
 
                 return res.status(400).json({
-
                     message:
                         'La contraseña debe tener al menos 8 caracteres.'
-
                 });
             }
 
-
             const result =
                 await AuthService.register({
-
                     name,
-
                     email,
-
                     password
-
                 });
-
 
             return res.status(201).json(
                 result
             );
-
 
         } catch (error) {
 
@@ -98,26 +71,16 @@ class AuthController {
                 error
             );
 
-
             return res.status(
                 error.statusCode || 500
             ).json({
-
                 message:
                     error.statusCode
                         ? error.message
                         : 'Error interno del servidor.'
-
             });
         }
     }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | LOGIN
-    |--------------------------------------------------------------------------
-    */
 
     async login(req, res) {
 
@@ -128,46 +91,34 @@ class AuthController {
                 password
             } = req.body;
 
-
             if (
                 !email ||
                 !email.trim()
             ) {
 
                 return res.status(400).json({
-
                     message:
                         'El correo es obligatorio.'
-
                 });
             }
-
 
             if (!password) {
 
                 return res.status(400).json({
-
                     message:
                         'La contraseña es obligatoria.'
-
                 });
             }
 
-
             const result =
                 await AuthService.login({
-
                     email,
-
                     password
-
                 });
-
 
             return res.status(200).json(
                 result
             );
-
 
         } catch (error) {
 
@@ -176,26 +127,59 @@ class AuthController {
                 error
             );
 
-
             return res.status(
                 error.statusCode || 500
             ).json({
-
                 message:
                     error.statusCode
                         ? error.message
                         : 'Error interno del servidor.'
-
             });
         }
     }
 
+    async google(req, res) {
 
-    /*
-    |--------------------------------------------------------------------------
-    | ME
-    |--------------------------------------------------------------------------
-    */
+        try {
+
+            const {
+                credential
+            } = req.body;
+
+            if (!credential) {
+
+                return res.status(400).json({
+                    message:
+                        'La credencial de Google es obligatoria.'
+                });
+            }
+
+            const result =
+                await AuthService.googleLogin(
+                    credential
+                );
+
+            return res.status(200).json(
+                result
+            );
+
+        } catch (error) {
+
+            console.error(
+                'Error en Google login:',
+                error
+            );
+
+            return res.status(
+                error.statusCode || 500
+            ).json({
+                message:
+                    error.statusCode
+                        ? error.message
+                        : 'Error interno del servidor.'
+            });
+        }
+    }
 
     async me(req, res) {
 
@@ -206,13 +190,9 @@ class AuthController {
                     req.user.id
                 );
 
-
             return res.status(200).json({
-
                 user
-
             });
-
 
         } catch (error) {
 
@@ -221,39 +201,16 @@ class AuthController {
                 error
             );
 
-
             return res.status(
                 error.statusCode || 500
             ).json({
-
                 message:
                     error.statusCode
                         ? error.message
                         : 'Error interno del servidor.'
-
             });
         }
     }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | VERIFY EMAIL
-    |--------------------------------------------------------------------------
-    |
-    | Este endpoint será utilizado por Angular
-    | cuando el usuario abra el enlace recibido
-    | por correo.
-    |
-    | Ejemplo:
-    |
-    | POST /api/auth/verify-email
-    |
-    | {
-    |     "token": "..."
-    | }
-    |
-    */
 
     async verifyEmail(req, res) {
 
@@ -263,23 +220,18 @@ class AuthController {
                 token
             } = req.body;
 
-
             if (!token) {
 
                 return res.status(400).json({
-
                     message:
                         'El token de verificación es obligatorio.'
-
                 });
             }
-
 
             const result =
                 await AuthService.verifyEmail(
                     token
                 );
-
 
             return res.status(200).json({
 
@@ -294,7 +246,6 @@ class AuthController {
 
             });
 
-
         } catch (error) {
 
             console.error(
@@ -302,22 +253,17 @@ class AuthController {
                 error
             );
 
-
             return res.status(
                 error.statusCode || 500
             ).json({
-
                 message:
                     error.statusCode
                         ? error.message
                         : 'Error interno del servidor.'
-
             });
         }
     }
-
 }
-
 
 module.exports =
     new AuthController();
