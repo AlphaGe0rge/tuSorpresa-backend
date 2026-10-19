@@ -8,6 +8,7 @@ const R2Service =
 
 const EmailService =
     require('./email.service');
+const QrCardService = require('./qr-card.service');
 
 
 class SurpriseService {
@@ -42,13 +43,9 @@ class SurpriseService {
     // CREATE
     // ============================================================
 
-    static async create(
-        data,
-        userId = null
-    ) {
+    static async create(data,userId = null) {
 
         this.validateData(data);
-
 
         /*
         |--------------------------------------------------------------------------
@@ -95,8 +92,7 @@ class SurpriseService {
         |--------------------------------------------------------------------------
         */
 
-        const surprise =
-            await Surprise.create({
+        const surprise = await Surprise.create({
 
                 userId:
                     normalizedUserId,
@@ -149,11 +145,20 @@ class SurpriseService {
 
         if (!normalizedUserId) {
             try {
+                const frontendUrl = process.env.FRONTEND_URL;
+                const publicUrl = `${frontendUrl}/s/${publicToken}`;
+
+                const qrBuffer = await QrCardService.generateCard(
+                    publicUrl,
+                    surprise.template
+                );
+
                 await EmailService.sendSurpriseCreated({
                     email: surprise.email,
-                    recipientName: surprise.recipientName,
+                    senderName: surprise.senderName,
                     publicToken,
-                    editToken
+                    editToken,
+                    qrBuffer
                 });
             } catch (error) {
                 console.error(

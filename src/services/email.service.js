@@ -297,68 +297,49 @@ class EmailService {
 
     static async sendSurpriseCreated({
         email,
-        recipientName,
+        senderName,
         publicToken,
-        editToken
+        editToken,
+        qrBuffer
     }) {
+        const frontendUrl = process.env.FRONTEND_URL;
 
-        const frontendUrl =
-            process.env.FRONTEND_URL;
+        const publicUrl = `${frontendUrl}/s/${publicToken}`;
+        const editUrl = `${frontendUrl}/e/${editToken}`;
 
+        const { data, error } = await this.resend.emails.send({
+            from: process.env.EMAIL_FROM,
+            to: [email],
+            subject: '🎁 Tu sorpresa está lista',
 
-        const publicUrl =
-            `${frontendUrl}/s/${publicToken}`;
+            html: this.buildSurpriseCreatedEmail({
+                senderName,
+                publicUrl,
+                editUrl
+            }),
 
-
-        const editUrl =
-            `${frontendUrl}/e/${editToken}`;
-
-
-        const { data, error } =
-            await this.resend.emails.send({
-
-                from:
-                    process.env.EMAIL_FROM,
-
-                to: [
-                    email
-                ],
-
-                subject:
-                    '🎁 Tu sorpresa está lista',
-
-                html:
-                    this.buildSurpriseCreatedEmail({
-                        recipientName,
-                        publicUrl,
-                        editUrl
-                    })
-            });
-
+            attachments: [
+                {
+                    filename: 'qr-tu-sorpresa.png',
+                    content: qrBuffer.toString('base64')
+                }
+            ]
+        });
 
         if (error) {
-
-            console.error(
-                'Unable to send surprise email:',
-                error
-            );
-
-            throw new Error(
-                'EMAIL_SEND_FAILED'
-            );
+            console.error('Unable to send surprise email:', error);
+            throw new Error('EMAIL_SEND_FAILED');
         }
-
 
         return data;
     }
-
 
     // ============================================================
     // SURPRISE CREATED TEMPLATE
     // ============================================================
 
     static buildSurpriseCreatedEmail({
-        recipientName,
+        senderName,
         publicUrl,
         editUrl
     }) {
