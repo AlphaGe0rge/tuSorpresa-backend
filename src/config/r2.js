@@ -1,8 +1,4 @@
-const {
-    S3Client,
-    PutObjectCommand,
-    DeleteObjectCommand
-} = require('@aws-sdk/client-s3');
+const {S3Client, PutObjectCommand, DeleteObjectCommand} = require('@aws-sdk/client-s3');
 
 class R2Service {
 

@@ -1,82 +1,13 @@
 const express = require('express');
 
-const PaymentController =
-    require('../controllers/payment.controller');
+const PaymentController = require('../controllers/payment.controller');
+const optionalAuthMiddleware = require('../middleware/optional-auth.middleware');
 
-const authMiddleware =
-    require('../middleware/auth.middleware');
+const router = express.Router();
 
-const optionalAuthMiddleware =
-    require('../middleware/optional-auth.middleware');
+router.post('/surprises/:surpriseId', optionalAuthMiddleware, PaymentController.create);
+router.get('/:paymentId', optionalAuthMiddleware, PaymentController.getStatus);
+router.get('/wompi/transaction/:transactionId', optionalAuthMiddleware, PaymentController.syncTransaction);
+router.post('/wompi/webhook', PaymentController.wompiWebhook);
 
-
-const router =
-    express.Router();
-
-
-// ============================================================
-// CREATE PAYMENT
-// ============================================================
-
-// Usuario registrado:
-//    JWT
-//
-// Invitado:
-//    editToken en body
-//
-router.post(
-    '/surprises/:surpriseId',
-    optionalAuthMiddleware,
-    PaymentController.create
-);
-
-
-// ============================================================
-// GET PAYMENT STATUS
-// ============================================================
-
-// Usuario registrado:
-//    JWT
-//
-// Invitado:
-//    ?editToken=...
-//
-router.get(
-    '/:paymentId',
-    optionalAuthMiddleware,
-    PaymentController.getStatus
-);
-
-
-// ============================================================
-// SYNC WOMPI TRANSACTION
-// ============================================================
-
-// Usuario registrado:
-//    JWT
-//
-// Invitado:
-//    ?editToken=...
-//
-router.get(
-    '/wompi/transaction/:transactionId',
-    optionalAuthMiddleware,
-    PaymentController.syncTransaction
-);
-
-
-// ============================================================
-// WOMPI WEBHOOK
-// ============================================================
-
-// Público.
-// La seguridad la proporciona la firma
-// del webhook de Wompi.
-router.post(
-    '/wompi/webhook',
-    PaymentController.wompiWebhook
-);
-
-
-module.exports =
-    router;
+module.exports = router;

@@ -224,9 +224,7 @@ class AuthService {
         };
     }
 
-    async googleLogin(
-        credential
-    ) {
+    async googleLogin(credential) {
 
         if (!credential) {
 

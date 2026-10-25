@@ -1,5 +1,4 @@
-const AuthService =
-    require('../services/auth.service');
+const AuthService = require('../services/auth.service');
 
 class AuthController {
 
@@ -7,77 +6,42 @@ class AuthController {
 
         try {
 
-            const {
-                name,
-                email,
-                password
-            } = req.body;
+            const {name, email, password} = req.body;
 
-            if (
-                !name ||
-                !name.trim()
-            ) {
-
+            if (!name || !name.trim()) {
                 return res.status(400).json({
-                    message:
-                        'El nombre es obligatorio.'
+                    message: 'El nombre es obligatorio.'
                 });
             }
 
-            if (
-                !email ||
-                !email.trim()
-            ) {
-
+            if (!email || !email.trim()) {
                 return res.status(400).json({
-                    message:
-                        'El correo es obligatorio.'
+                    message: 'El correo es obligatorio.'
                 });
             }
 
             if (!password) {
-
                 return res.status(400).json({
-                    message:
-                        'La contraseña es obligatoria.'
+                    message: 'La contraseña es obligatoria.'
                 });
             }
 
-            if (
-                password.length < 8
-            ) {
-
+            if (password.length < 8) {
                 return res.status(400).json({
-                    message:
-                        'La contraseña debe tener al menos 8 caracteres.'
+                    message: 'La contraseña debe tener al menos 8 caracteres.'
                 });
             }
 
-            const result =
-                await AuthService.register({
-                    name,
-                    email,
-                    password
-                });
+            const result = await AuthService.register({name, email, password});
 
-            return res.status(201).json(
-                result
-            );
+            return res.status(201).json(result);
 
         } catch (error) {
 
-            console.error(
-                'Error en register:',
-                error
-            );
+            console.error('Error en register:', error);
 
-            return res.status(
-                error.statusCode || 500
-            ).json({
-                message:
-                    error.statusCode
-                        ? error.message
-                        : 'Error interno del servidor.'
+            return res.status(error.statusCode || 500).json({
+                message: error.statusCode ? error.message : 'Error interno del servidor.'
             });
         }
     }
@@ -86,54 +50,30 @@ class AuthController {
 
         try {
 
-            const {
-                email,
-                password
-            } = req.body;
+            const {email, password} = req.body;
 
-            if (
-                !email ||
-                !email.trim()
-            ) {
-
+            if (!email || !email.trim()) {
                 return res.status(400).json({
-                    message:
-                        'El correo es obligatorio.'
+                    message: 'El correo es obligatorio.'
                 });
             }
 
             if (!password) {
-
                 return res.status(400).json({
-                    message:
-                        'La contraseña es obligatoria.'
+                    message: 'La contraseña es obligatoria.'
                 });
             }
 
-            const result =
-                await AuthService.login({
-                    email,
-                    password
-                });
+            const result = await AuthService.login({email, password});
 
-            return res.status(200).json(
-                result
-            );
+            return res.status(200).json(result);
 
         } catch (error) {
 
-            console.error(
-                'Error en login:',
-                error
-            );
+            console.error('Error en login:', error);
 
-            return res.status(
-                error.statusCode || 500
-            ).json({
-                message:
-                    error.statusCode
-                        ? error.message
-                        : 'Error interno del servidor.'
+            return res.status(error.statusCode || 500).json({
+                message: error.statusCode ? error.message : 'Error interno del servidor.'
             });
         }
     }
@@ -142,41 +82,24 @@ class AuthController {
 
         try {
 
-            const {
-                credential
-            } = req.body;
+            const {credential} = req.body;
 
             if (!credential) {
-
                 return res.status(400).json({
-                    message:
-                        'La credencial de Google es obligatoria.'
+                    message: 'La credencial de Google es obligatoria.'
                 });
             }
 
-            const result =
-                await AuthService.googleLogin(
-                    credential
-                );
+            const result = await AuthService.googleLogin(credential);
 
-            return res.status(200).json(
-                result
-            );
+            return res.status(200).json(result);
 
         } catch (error) {
 
-            console.error(
-                'Error en Google login:',
-                error
-            );
+            console.error('Error en Google login:', error);
 
-            return res.status(
-                error.statusCode || 500
-            ).json({
-                message:
-                    error.statusCode
-                        ? error.message
-                        : 'Error interno del servidor.'
+            return res.status(error.statusCode || 500).json({
+                message: error.statusCode ? error.message : 'Error interno del servidor.'
             });
         }
     }
@@ -185,29 +108,16 @@ class AuthController {
 
         try {
 
-            const user =
-                await AuthService.getMe(
-                    req.user.id
-                );
+            const user = await AuthService.getMe(req.user.id);
 
-            return res.status(200).json({
-                user
-            });
+            return res.status(200).json({user});
 
         } catch (error) {
 
-            console.error(
-                'Error en /me:',
-                error
-            );
+            console.error('Error en /me:', error);
 
-            return res.status(
-                error.statusCode || 500
-            ).json({
-                message:
-                    error.statusCode
-                        ? error.message
-                        : 'Error interno del servidor.'
+            return res.status(error.statusCode || 500).json({
+                message: error.statusCode ? error.message : 'Error interno del servidor.'
             });
         }
     }
@@ -216,54 +126,31 @@ class AuthController {
 
         try {
 
-            const {
-                token
-            } = req.body;
+            const {token} = req.body;
 
             if (!token) {
-
                 return res.status(400).json({
-                    message:
-                        'El token de verificación es obligatorio.'
+                    message: 'El token de verificación es obligatorio.'
                 });
             }
 
-            const result =
-                await AuthService.verifyEmail(
-                    token
-                );
+            const result = await AuthService.verifyEmail(token);
 
             return res.status(200).json({
-
-                message:
-                    'Correo electrónico verificado correctamente.',
-
-                user:
-                    result.user,
-
-                claimedSurprises:
-                    result.claimedSurprises
-
+                message: 'Correo electrónico verificado correctamente.',
+                user: result.user,
+                claimedSurprises: result.claimedSurprises
             });
 
         } catch (error) {
 
-            console.error(
-                'Error en verify-email:',
-                error
-            );
+            console.error('Error en verify-email:', error);
 
-            return res.status(
-                error.statusCode || 500
-            ).json({
-                message:
-                    error.statusCode
-                        ? error.message
-                        : 'Error interno del servidor.'
+            return res.status(error.statusCode || 500).json({
+                message: error.statusCode ? error.message : 'Error interno del servidor.'
             });
         }
     }
 }
 
-module.exports =
-    new AuthController();
+module.exports = new AuthController();

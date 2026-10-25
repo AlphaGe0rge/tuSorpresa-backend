@@ -5,10 +5,7 @@ function generateToken(bytes = 32) {
 }
 
 function hashToken(token) {
-    return crypto
-        .createHash('sha512')
-        .update(token)
-        .digest('hex');
+    return crypto.createHash('sha512').update(token).digest('hex');
 }
 
 module.exports = {

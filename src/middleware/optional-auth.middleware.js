@@ -5,120 +5,44 @@ async function optionalAuthMiddleware(req, res, next) {
 
     try {
 
-        const authorization =
-            req.headers.authorization;
-
-
-        // ========================================================
-        // SIN AUTENTICACIÓN
-        // ========================================================
+        const authorization = req.headers.authorization;
 
         if (!authorization) {
-
             req.user = null;
-
             return next();
-
         }
 
+        const [type, token] = authorization.split(' ');
 
-        // ========================================================
-        // VALIDAR FORMATO
-        // ========================================================
-
-        const [type, token] =
-            authorization.split(' ');
-
-
-        if (
-            type !== 'Bearer' ||
-            !token
-        ) {
-
+        if (type !== 'Bearer' || !token) {
             return res.status(401).json({
-
-                message:
-                    'Token de autenticación inválido.'
-
+                message: 'Token de autenticación inválido.'
             });
-
         }
 
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-        // ========================================================
-        // VALIDAR TOKEN
-        // ========================================================
-
-        const decoded =
-            jwt.verify(
-                token,
-                process.env.JWT_SECRET
-            );
-
-
-        // ========================================================
-        // BUSCAR USUARIO
-        // ========================================================
-
-        const user =
-            await User.findByPk(
-                decoded.sub
-            );
-
+        const user = await User.findByPk(decoded.sub);
 
         if (!user) {
-
             return res.status(401).json({
-
-                message:
-                    'El usuario no existe.'
-
+                message: 'El usuario no existe.'
             });
-
         }
 
-
-        // ========================================================
-        // VALIDAR ESTADO
-        // ========================================================
-
-        if (
-            user.status !== 'ACTIVE'
-        ) {
-
+        if (user.status !== 'ACTIVE') {
             return res.status(403).json({
-
-                message:
-                    'El usuario se encuentra deshabilitado.'
-
+                message: 'El usuario se encuentra deshabilitado.'
             });
-
         }
-
-
-        // ========================================================
-        // USUARIO AUTENTICADO
-        // ========================================================
 
         req.user = {
-
-            id:
-                user.id,
-
-            name:
-                user.name,
-
-            email:
-                user.email,
-
-            roles:
-                user.roles,
-
-            status:
-                user.status
-
+            id:user.id,
+            name:user.name,
+            email:user.email,
+            roles:user.roles,
+            status:user.status
         };
-
 
         return next();
 
@@ -127,14 +51,10 @@ async function optionalAuthMiddleware(req, res, next) {
         console.error(error);
 
         return res.status(401).json({
-
-            message:
-                'Token inválido o expirado.'
-
+            message: 'Token inválido o expirado.'
         });
 
     }
 }
 
-module.exports =
-    optionalAuthMiddleware;
+module.exports = optionalAuthMiddleware;

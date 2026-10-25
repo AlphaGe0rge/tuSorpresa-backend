@@ -27,30 +27,24 @@ class WompiService {
     // INTEGRITY SIGNATURE
     // ============================================================
 
-    static generateIntegritySignature({
-        reference,
-        amountInCents,
-        currency = 'COP'
-    }) {
 
-        if (
-            !reference ||
-            !amountInCents ||
-            !currency
-        ) {
-            throw new Error(
-                'INVALID_WOMPI_SIGNATURE_DATA'
-            );
+    
+    
+    static generateIntegritySignature({ reference, amountInCents, currency = 'COP' }) {
+        const secret = process.env.WOMPI_INTEGRITY_SECRET;
+
+        if (!reference || !Number.isSafeInteger(Number(amountInCents)) || !currency || !secret) {
+            throw new Error('INVALID_WOMPI_SIGNATURE_CONFIGURATION');
         }
 
-        const value =
-            `${reference}${amountInCents}${currency}${process.env.WOMPI_INTEGRITY_SECRET}`;
+        const value = `${reference}${amountInCents}${currency}${secret}`;
 
         return crypto
             .createHash('sha256')
             .update(value)
             .digest('hex');
     }
+
 
 
     // ============================================================

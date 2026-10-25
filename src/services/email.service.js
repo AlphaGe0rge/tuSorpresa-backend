@@ -1,70 +1,78 @@
-const { Resend } = require('resend');
-
+const axios = require('axios');
 
 class EmailService {
 
+    static apiUrl = 'https://api.brevo.com/v3/smtp/email';
 
-    static resend =
-        new Resend(
-            process.env.RESEND_API_KEY
-        );
+    static async sendEmail({ email, subject, html, attachments = [] }) {
+        try {
+            const response = await axios.post(
+                this.apiUrl,
+                {
+                    sender: this.getSender(),
+                    to: [{ email }],
+                    subject,
+                    htmlContent: html,
+                    ...(attachments.length ? { attachment: attachments } : {})
+                },
+                {
+                    headers: {
+                        'api-key': process.env.BREVO_API_KEY,
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    timeout: 30000
+                }
+            );
 
+            return response.data;
+        } catch (error) {
+            console.error(
+                'Brevo email error:',
+                error.response?.data || error.message
+            );
 
+            throw new Error('EMAIL_SEND_FAILED');
+        }
+    }
+
+    static getSender() {
+        const sender = process.env.EMAIL_FROM;
+
+        // Formato esperado: Nombre <correo@dominio.com>
+        const match = sender?.match(/^(.*?)\s*<([^<>]+)>$/);
+
+        if (match) {
+            return {
+                name: match[1].trim(),
+                email: match[2].trim()
+            };
+        }
+
+        if (sender && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sender)) {
+            return { email: sender };
+        }
+
+        throw new Error('INVALID_EMAIL_FROM');
+    }
     // ============================================================
     // EMAIL VERIFICATION
     // ============================================================
 
-    static async sendEmailVerification({
-        email,
-        name,
-        verificationToken
-    }) {
-
-        const frontendUrl =
-            process.env.FRONTEND_URL;
-
+    static async sendEmailVerification({ email, name, verificationToken }) {
+        const frontendUrl = process.env.FRONTEND_URL;
 
         const verificationUrl =
-            `${frontendUrl}/verify-email?token=${encodeURIComponent(
-                verificationToken
-            )}`;
+            `${frontendUrl}/verify-email?token=${encodeURIComponent(verificationToken)}`;
 
-
-        const { data, error } =
-            await this.resend.emails.send({
-
-                from:
-                    process.env.EMAIL_FROM,
-
-                to: [
-                    email
-                ],
-
-                subject:
-                    '💌 Verifica tu correo en TuSorpresa',
-
-                html:
-                    this.buildEmailVerificationEmail({
-                        name,
-                        verificationUrl
-                    })
-            });
-
-
-        if (error) {
-
-            console.error(
-                'Unable to send email verification:',
-                error
-            );
-
-            throw new Error(
-                'EMAIL_SEND_FAILED'
-            );
-        }
-
-
-        return data;
+        return this.sendEmail({
+            email,
+            subject: '💌 Verifica tu correo en TuSorpresa',
+            html: this.buildEmailVerificationEmail({
+                name,
+                verificationUrl
+            })
+        });
     }
 
 
@@ -297,6 +305,7 @@ class EmailService {
 
     static async sendSurpriseCreated({
         email,
+        recipientName,
         senderName,
         publicToken,
         editToken,
@@ -304,36 +313,26 @@ class EmailService {
     }) {
         const frontendUrl = process.env.FRONTEND_URL;
 
-        const publicUrl = `${frontendUrl}/s/${publicToken}`;
-        const editUrl = `${frontendUrl}/e/${editToken}`;
+        const publicUrl = `${frontendUrl}/sorpresa/${publicToken}`;
+        const editUrl = `${frontendUrl}/editar/${editToken}`;
 
-        const { data, error } = await this.resend.emails.send({
-            from: process.env.EMAIL_FROM,
-            to: [email],
+        return this.sendEmail({
+            email,
             subject: '🎁 Tu sorpresa está lista',
-
             html: this.buildSurpriseCreatedEmail({
+                recipientName,
                 senderName,
                 publicUrl,
                 editUrl
             }),
-
-            attachments: [
-                {
-                    filename: 'qr-tu-sorpresa.png',
+            attachments: qrBuffer
+                ? [{
+                    name: 'qr-tu-sorpresa.png',
                     content: qrBuffer.toString('base64')
-                }
-            ]
+                }]
+                : []
         });
-
-        if (error) {
-            console.error('Unable to send surprise email:', error);
-            throw new Error('EMAIL_SEND_FAILED');
-        }
-
-        return data;
     }
-
     // ============================================================
     // SURPRISE CREATED TEMPLATE
     // ============================================================
@@ -349,196 +348,168 @@ class EmailService {
 
 <html lang="es">
 
-<head>
+    <head>
 
-    <meta charset="UTF-8">
+        <meta charset="UTF-8">
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0"
+        >
 
-    <title>
-        Tu sorpresa está lista
-    </title>
+        <title>
+            Tu sorpresa está lista
+        </title>
 
-</head>
+    </head>
 
 
-<body
-    style="
-        margin:0;
-        padding:0;
-        background:#fff4f7;
-        font-family:Arial,Helvetica,sans-serif;
-        color:#2b1b22;
-    "
->
-
-    <div
+    <body
         style="
-            max-width:620px;
-            margin:0 auto;
-            padding:40px 20px;
+            margin:0;
+            padding:0;
+            background:#fff4f7;
+            font-family:Arial,Helvetica,sans-serif;
+            color:#2b1b22;
         "
     >
 
         <div
             style="
-                background:#ffffff;
-                border-radius:24px;
-                padding:40px 30px;
-                text-align:center;
-                box-shadow:
-                    0 15px 50px
-                    rgba(120,30,60,0.12);
+                max-width:620px;
+                margin:0 auto;
+                padding:40px 20px;
             "
         >
 
             <div
                 style="
-                    font-size:42px;
-                    margin-bottom:15px;
-                "
-            >
-                💌
-            </div>
-
-
-            <h1
-                style="
-                    margin:0 0 15px;
-                    font-size:32px;
-                    color:#c73562;
-                "
-            >
-                ¡Tu sorpresa está lista!
-            </h1>
-
-
-            <p
-                style="
-                    font-size:17px;
-                    line-height:1.6;
-                    color:#5f4b53;
-                "
-            >
-                Hola,
-                <strong>
-                    ${this.escapeHtml(recipientName)}
-                </strong>.
-            </p>
-
-
-            <p
-                style="
-                    font-size:16px;
-                    line-height:1.7;
-                    color:#6b5961;
-                "
-            >
-                Tu página personalizada fue creada
-                correctamente.
-                Guarda este correo porque aquí tienes
-                los enlaces para acceder a ella.
-            </p>
-
-
-            <!-- VIEW -->
-
-            <div
-                style="
-                    margin-top:30px;
+                    background:#ffffff;
+                    border-radius:24px;
+                    padding:40px 30px;
+                    text-align:center;
+                    box-shadow:
+                        0 15px 50px
+                        rgba(120,30,60,0.12);
                 "
             >
 
-                <a
-                    href="${publicUrl}"
+                <div
                     style="
-                        display:inline-block;
-                        padding:15px 28px;
-                        background:#d94670;
-                        color:#ffffff;
-                        text-decoration:none;
-                        border-radius:12px;
-                        font-size:16px;
-                        font-weight:bold;
+                        font-size:42px;
+                        margin-bottom:15px;
                     "
                 >
-                    💖 Ver mi sorpresa
-                </a>
-
-            </div>
+                    💌
+                </div>
 
 
-            <!-- EDIT -->
-
-            <div
-                style="
-                    margin-top:15px;
-                "
-            >
-
-                <a
-                    href="${editUrl}"
+                <h1
                     style="
-                        display:inline-block;
-                        padding:14px 25px;
-                        background:#f4e5ea;
-                        color:#a52d50;
-                        text-decoration:none;
-                        border-radius:12px;
-                        font-size:15px;
-                        font-weight:bold;
+                        margin:0 0 15px;
+                        font-size:32px;
+                        color:#c73562;
                     "
                 >
-                    ✏️ Editar mi sorpresa
-                </a>
+                    ¡Tu sorpresa está lista!
+                </h1>
 
-            </div>
-
-
-            <div
-                style="
-                    margin-top:35px;
-                    padding-top:25px;
-                    border-top:1px solid #f0dce3;
-                "
-            >
 
                 <p
                     style="
-                        margin:0;
-                        font-size:13px;
+                        font-size:17px;
                         line-height:1.6;
-                        color:#8c7b82;
+                        color:#5f4b53;
                     "
                 >
-                    Guarda especialmente el enlace
-                    de edición. Lo necesitarás si
-                    quieres modificar tu sorpresa
-                    posteriormente.
+                    Hola,
+                    <strong>
+                        ${this.escapeHtml(senderName)}
+                    </strong>.
                 </p>
+
+
+                <p
+                    style="
+                        font-size:16px;
+                        line-height:1.7;
+                        color:#6b5961;
+                    "
+                >
+                    Tu página personalizada fue creada
+                    correctamente.
+                    Guarda este correo porque aquí tienes
+                    los enlaces para acceder a ella.
+                </p>
+
+
+                <!-- VIEW -->
+
+                <div
+                    style="
+                        margin-top:30px;
+                    "
+                >
+
+                    <a
+                        href="${publicUrl}"
+                        style="
+                            display:inline-block;
+                            padding:15px 28px;
+                            background:#d94670;
+                            color:#ffffff;
+                            text-decoration:none;
+                            border-radius:12px;
+                            font-size:16px;
+                            font-weight:bold;
+                        "
+                    >
+                        💖 Ver mi sorpresa
+                    </a>
+
+                </div>
+
+                <div
+                    style="
+                        margin-top:35px;
+                        padding-top:25px;
+                        border-top:1px solid #f0dce3;
+                    "
+                >
+
+                    <p
+                        style="
+                            margin:0;
+                            font-size:13px;
+                            line-height:1.6;
+                            color:#8c7b82;
+                        "
+                    >
+                        Guarda especialmente el enlace
+                        de edición. Lo necesitarás si
+                        quieres modificar tu sorpresa
+                        posteriormente.
+                    </p>
+
+                </div>
 
             </div>
 
+
+            <p
+                style="
+                    margin-top:25px;
+                    text-align:center;
+                    font-size:12px;
+                    color:#a08e95;
+                "
+            >
+                Este correo fue enviado automáticamente.
+            </p>
+
         </div>
 
-
-        <p
-            style="
-                margin-top:25px;
-                text-align:center;
-                font-size:12px;
-                color:#a08e95;
-            "
-        >
-            Este correo fue enviado automáticamente.
-        </p>
-
-    </div>
-
-</body>
+    </body>
 
 </html>
         `;

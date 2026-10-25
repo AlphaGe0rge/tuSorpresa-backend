@@ -93,82 +93,20 @@ class SurpriseService {
         */
 
         const surprise = await Surprise.create({
-
-                userId:
-                    normalizedUserId,
-
-                template:
-                    data.template,
-
-                publicToken,
-
-                editTokenHash,
-
-                recipientName:
-                    data.recipientName,
-
-                senderName:
-                    data.senderName || null,
-
-                email:
-                    data.email,
-
-                photos: [],
-
-                dynamicData:
-                    data.dynamicData || {},
-
-                title:
-                    data.title || null,
-
-                message:
-                    data.message || null,
-
-                expiresAt:
-                    data.expiresAt || null,
-
-                status:
-                    'ACTIVE'
-
-            });
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | SEND EMAIL
-        |--------------------------------------------------------------------------
-        |
-        | Tanto usuarios registrados como invitados
-        | reciben la información de su sorpresa.
-        |
-        */
-
-        if (!normalizedUserId) {
-            try {
-                const frontendUrl = process.env.FRONTEND_URL;
-                const publicUrl = `${frontendUrl}/s/${publicToken}`;
-
-                const qrBuffer = await QrCardService.generateCard(
-                    publicUrl,
-                    surprise.template
-                );
-
-                await EmailService.sendSurpriseCreated({
-                    email: surprise.email,
-                    senderName: surprise.senderName,
-                    publicToken,
-                    editToken,
-                    qrBuffer
-                });
-            } catch (error) {
-                console.error(
-                    'Unable to send surprise email:',
-                    error
-                );
-            }
-        }
-
-
+            userId: normalizedUserId,
+            template: data.template,
+            publicToken,
+            editTokenHash,
+            recipientName: data.recipientName,
+            senderName: data.senderName || null,
+            email: data.email,
+            photos: [],
+            dynamicData: data.dynamicData || {},
+            title: data.title || null,
+            message: data.message || null,
+            expiresAt: data.expiresAt || null,
+            status: 'PENDING_PAYMENT'
+        });
         /*
         |--------------------------------------------------------------------------
         | RESPONSE
@@ -176,14 +114,9 @@ class SurpriseService {
         */
 
         return {
-
-            id:
-                surprise.id,
-
+            id: surprise.id,
             publicToken,
-
             editToken
-
         };
     }
 
@@ -395,46 +328,43 @@ class SurpriseService {
     // GET PUBLIC SURPRISE
     // ============================================================
 
-    static async getPublic(
-        publicToken
-    ) {
+    static async getPublic(publicToken) {
 
-        const surprise =
-            await Surprise.findOne({
+        const surprise = await Surprise.findOne({
 
-                where: {
-                    publicToken
-                },
+            where: {
+                publicToken
+            },
 
-                attributes: [
+            attributes: [
 
-                    'id',
+                'id',
 
-                    'template',
+                'template',
 
-                    'recipientName',
+                'recipientName',
 
-                    'senderName',
+                'senderName',
 
-                    'title',
+                'title',
 
-                    'message',
+                'message',
 
-                    'photos',
+                'photos',
 
-                    'dynamicData',
+                'dynamicData',
 
-                    'createdAt',
+                'createdAt',
 
-                    'updatedAt',
+                'updatedAt',
 
-                    'expiresAt',
+                'expiresAt',
 
-                    'status'
+                'status'
 
-                ]
+            ]
 
-            });
+        });
 
 
         if (!surprise) {
@@ -1530,6 +1460,4 @@ class SurpriseService {
     }
 }
 
-
-module.exports =
-    SurpriseService;
+module.exports = SurpriseService;

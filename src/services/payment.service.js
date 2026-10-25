@@ -18,25 +18,27 @@ class PaymentService {
     // PRICE
     // ============================================================
 
-    static getPriceInCop() {
+    static getPlanDetails(plan) {
 
-        const price =
-            Number(
-                process.env.WOMPI_SURPRISE_PRICE_COP
-            );
+        const plans = {
+            '30-days': {
+                priceCop: 19990,
+                durationDays: 30
+            },
+            permanent: {
+                priceCop: 48990,
+                durationDays: null
+            }
+        };
 
-        if (
-            !Number.isInteger(price) ||
-            price <= 0
-        ) {
-            throw new Error(
-                'INVALID_WOMPI_PRICE'
-            );
+        const selectedPlan = plans[plan];
+
+        if (!selectedPlan) {
+            throw new Error('INVALID_SURPRISE_PLAN');
         }
 
-        return price;
+        return selectedPlan;
     }
-
 
     // ============================================================
     // CREATE PAYMENT
@@ -44,6 +46,7 @@ class PaymentService {
 
     static async createPayment(
         surpriseId,
+        plan,
         userId = null,
         editToken = null
     ) {
@@ -87,21 +90,16 @@ class PaymentService {
         // Estado
         // --------------------------------------------------------
 
-        if (
-            surprise.status === 'ACTIVE'
-        ) {
-            throw new Error(
-                'SURPRISE_ALREADY_PAID'
-            );
+        if (surprise.status === 'ACTIVE') {
+            throw new Error('SURPRISE_ALREADY_PAID');
         }
 
+        if (surprise.status === 'EXPIRED') {
+            throw new Error('SURPRISE_EXPIRED');
+        }
 
-        if (
-            surprise.status === 'EXPIRED'
-        ) {
-            throw new Error(
-                'SURPRISE_EXPIRED'
-            );
+        if (surprise.status !== 'PENDING_PAYMENT') {
+            throw new Error('SURPRISE_NOT_PENDING_PAYMENT');
         }
 
 
@@ -114,14 +112,9 @@ class PaymentService {
          *
          * Nunca recibimos amount desde Angular.
          */
-
-        const priceCop =
-            this.getPriceInCop();
-
-
-        const amountInCents =
-            priceCop * 100;
-
+        const planDetails = this.getPlanDetails(plan);
+        const priceCop = planDetails.priceCop;
+        const amountInCents = priceCop * 100;
 
         // --------------------------------------------------------
         // Reference
@@ -135,75 +128,54 @@ class PaymentService {
         // Integrity signature
         // --------------------------------------------------------
 
-        const signature =
-            WompiService.generateIntegritySignature({
-                reference,
-                amountInCents,
-                currency: 'COP'
-            });
+        console.log({
+            hasPublicKey: Boolean(process.env.WOMPI_PUBLIC_KEY),
+            publicKeyPrefix: process.env.WOMPI_PUBLIC_KEY?.split('_').slice(0, 2).join('_'),
+            hasIntegritySecret: Boolean(process.env.WOMPI_INTEGRITY_SECRET),
+            integritySecretPrefix: process.env.WOMPI_INTEGRITY_SECRET?.split('_').slice(0, 2).join('_'),
+            baseUrl: WompiService.getBaseUrl()
+        });
 
-
-        // --------------------------------------------------------
-        // Create payment
-        // --------------------------------------------------------
-
-        const payment =
-            await Payment.create({
-
-                surpriseId:
-                    surprise.id,
-
-                provider:
-                    'WOMPI',
-
-                reference,
-
-                amountInCents,
-
-                currency:
-                    'COP',
-
-                status:
-                    'PENDING'
-            });
-
-
-        // --------------------------------------------------------
-        // Response
-        // --------------------------------------------------------
-
-        return {
-
-            paymentId:
-                payment.id,
-
+        const signature = WompiService.generateIntegritySignature({
             reference,
-
             amountInCents,
+            currency: 'COP'
+        });
 
-            currency:
-                'COP',
+        console.log({
+            reference,
+            amountInCents,
+            currency: 'COP',
+            signatureLength: signature.length,
+            signatureFormat: /^[a-f0-9]{64}$/i.test(signature)
+        });
 
-            publicKey:
-                process.env.WOMPI_PUBLIC_KEY,
+        // Create payment
+        const payment = await Payment.create({
+            surpriseId: surprise.id,
+            provider: 'WOMPI',
+            reference,
+            amountInCents,
+            currency: 'COP',
+            status: 'PENDING',
+            plan,
+            durationDays: planDetails.durationDays
+        });
 
+        // Response
+        return {
+            paymentId: payment.id,
+            reference,
+            amountInCents,
+            currency: 'COP',
+            publicKey: process.env.WOMPI_PUBLIC_KEY,
             signature,
-
-            redirectUrl:
-                process.env.WOMPI_REDIRECT_URL
+            redirectUrl: process.env.WOMPI_REDIRECT_URL
         };
     }
 
-
-    // ============================================================
     // AUTHORIZE SURPRISE ACCESS
-    // ============================================================
-
-    static async authorizeSurpriseAccess({
-        surprise,
-        userId = null,
-        editToken = null
-    }) {
+    static async authorizeSurpriseAccess({surprise, userId = null, editToken = null}) {
 
         // --------------------------------------------------------
         // Registered user
@@ -378,11 +350,7 @@ class PaymentService {
         // Apply transaction
         // --------------------------------------------------------
 
-        await this.applyTransaction(
-            payment,
-            transaction
-        );
-
+        await this.applyTransaction(payment, transaction);
 
         await payment.reload({
             include: [
@@ -531,10 +499,7 @@ class PaymentService {
         // Apply transaction
         // --------------------------------------------------------
 
-        await this.applyTransaction(
-            payment,
-            transaction
-        );
+        await this.applyTransaction(payment, transaction);
     }
 
 
@@ -542,10 +507,7 @@ class PaymentService {
     // APPLY WOMPI TRANSACTION
     // ============================================================
 
-    static async applyTransaction(
-        payment,
-        transaction
-    ) {
+    static async applyTransaction(payment, transaction) {
 
         /*
          * Nunca confiamos únicamente
@@ -645,17 +607,15 @@ class PaymentService {
             // Activate surprise
             // ----------------------------------------------------
 
-            if (
-                payment.surprise.status !==
-                'ACTIVE'
-            ) {
+            if (payment.surprise.status !== 'ACTIVE') {
+
+                const expiresAt = payment.durationDays === null ? null : new Date(payment.paidAt.getTime() + payment.durationDays * 24 * 60 * 60 * 1000);
 
                 await payment.surprise.update({
-                    status:
-                        'ACTIVE'
+                    status: 'ACTIVE',
+                    expiresAt
                 });
             }
-
 
             // ----------------------------------------------------
             // Email
@@ -667,15 +627,11 @@ class PaymentService {
              * el webhook.
              */
 
-            if (
-                previousStatus !==
-                'APPROVED'
-            ) {
+            if (previousStatus !== 'APPROVED') {
 
                 try {
 
-                    await EmailService
-                        .sendSurpriseCreated({
+                    await EmailService .sendSurpriseCreated({
 
                             email:
                                 payment.surprise.email,
