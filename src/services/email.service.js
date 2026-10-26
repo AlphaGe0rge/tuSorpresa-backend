@@ -4,7 +4,7 @@ class EmailService {
 
     static apiUrl = 'https://api.brevo.com/v3/smtp/email';
 
-    static async sendEmail({ email, subject, html, attachments = [] }) {
+    static async sendEmail({ email, subject, html, attachments = [], replyTo }) {
         try {
             const response = await axios.post(
                 this.apiUrl,
@@ -13,6 +13,7 @@ class EmailService {
                     to: [{ email }],
                     subject,
                     htmlContent: html,
+                    ...(replyTo ? { replyTo } : {}),
                     ...(attachments.length ? { attachment: attachments } : {})
                 },
                 {
@@ -491,6 +492,70 @@ class EmailService {
                                   .replace(/>/g, '&gt;')
                                   .replace(/"/g, '&quot;')
                                   .replace(/'/g, '&#039;');
+    }
+
+    
+    static async sendContactMessage({to, name, email, reason, orderReference, subject, message}) {
+        
+        const reasonLabels = {
+            purchase: 'Compra o pago',
+            experience: 'Mi experiencia digital',
+            refund: 'Devolución o reembolso',
+            privacy: 'Privacidad y datos personales',
+            other: 'Otra consulta'
+        };
+
+        const safeName = this.escapeHtml(name);
+        const safeEmail = this.escapeHtml(email);
+        const safeReason = this.escapeHtml(reasonLabels[reason] || reason);
+        const safeReference = this.escapeHtml(orderReference || 'No indicada');
+        const safeSubject = this.escapeHtml(subject || 'Consulta general');
+        const safeMessage = this.escapeHtml(message).replace(/\r?\n/g, '<br>');
+
+        const html = `
+            <!DOCTYPE html>
+            <html lang="es">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Nueva consulta de contacto</title>
+            </head>
+            <body style="margin:0;padding:24px;background:#fff4f7;font-family:Arial,sans-serif;color:#302128;">
+                <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #f0dfe5;border-radius:16px;padding:28px;">
+                    <p style="color:#9b6177;font-size:12px;font-weight:bold;letter-spacing:2px;">
+                        TUSORPRESADIGITAL
+                    </p>
+
+                    <h1 style="color:#302128;font-size:24px;">
+                        Nueva consulta de contacto
+                    </h1>
+
+                    <p><strong>Nombre:</strong> ${safeName}</p>
+                    <p><strong>Correo:</strong> ${safeEmail}</p>
+                    <p><strong>Motivo:</strong> ${safeReason}</p>
+                    <p><strong>Referencia:</strong> ${safeReference}</p>
+                    <p><strong>Asunto:</strong> ${safeSubject}</p>
+
+                    <div style="margin-top:22px;padding:18px;background:#fff7f9;border-radius:12px;">
+                        <p style="font-weight:bold;">Mensaje</p>
+                        <p style="line-height:1.7;overflow-wrap:anywhere;">
+                            ${safeMessage}
+                        </p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `;
+
+        return this.sendEmail({
+            email: to,
+            subject: `[Contacto TuSorpresaDigital] ${subject || reasonLabels[reason] || 'Consulta'}`,
+            html,
+            replyTo: {
+                email,
+                name
+            }
+        });
     }
 
 }

@@ -10,6 +10,7 @@ require('./models');
 const surpriseRoutes = require('./routes/surprise.routes');
 const paymentRoutes = require('./routes/payment.routes');
 const authRoutes = require('./routes/auth.routes');
+const contactRoutes = require('./routes/contact.routes');
 
 const app = express();
 
@@ -42,6 +43,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/surprises', surpriseRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/contact', contactRoutes);
 
 // Start server
 const startServer = async () => {
