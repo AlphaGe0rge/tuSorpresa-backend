@@ -232,6 +232,7 @@ class QrCardService {
     }
 
     static async generateCard(publicUrl, template) {
+      
         const theme = this.getTheme(template);
 
         const qrDataUrl = await QRCode.toDataURL(publicUrl, {
@@ -255,82 +256,82 @@ class QrCardService {
         const eyebrow = this.escapeXml(theme.eyebrow);
 
         const svg = `
-<svg xmlns="http://www.w3.org/2000/svg"
-     xmlns:xlink="http://www.w3.org/1999/xlink"
-     width="400" height="500" viewBox="0 0 400 500">
+            <svg xmlns="http://www.w3.org/2000/svg"
+                 xmlns:xlink="http://www.w3.org/1999/xlink"
+                 width="400" height="500" viewBox="0 0 400 500">
 
-    <defs>
-        <clipPath id="cardClip">
-            <rect x="0.5" y="0.5" width="399" height="499" rx="24"/>
-        </clipPath>
-    </defs>
+                  <defs>
+                        <clipPath id="cardClip">
+                              <rect x="0.5" y="0.5" width="399" height="499" rx="24"/>
+                        </clipPath>
+                  </defs>
 
-    <g clip-path="url(#cardClip)">
-        <rect width="400" height="500" fill="#ffffff"/>
+                  <g clip-path="url(#cardClip)">
+                        <rect width="400" height="500" fill="#ffffff"/>
 
-        <circle cx="-4" cy="-4" r="76"
-                fill="${theme.background}" opacity=".85"/>
-        <circle cx="405" cy="505" r="76"
-                fill="${theme.background}" opacity=".85"/>
+                        <circle cx="-4" cy="-4" r="76"
+                              fill="${theme.background}" opacity=".85"/>
+                        <circle cx="405" cy="505" r="76"
+                              fill="${theme.background}" opacity=".85"/>
 
-        <rect x="8" y="0" width="5" height="500"
-              fill="${theme.frame}" opacity=".22"/>
-        <rect x="387" y="0" width="5" height="500"
-              fill="${theme.frame}" opacity=".22"/>
+                        <rect x="8" y="0" width="5" height="500"
+                              fill="${theme.frame}" opacity=".22"/>
+                        <rect x="387" y="0" width="5" height="500"
+                              fill="${theme.frame}" opacity=".22"/>
 
-        <rect x="0.5" y="0.5" width="399" height="499"
-              rx="24" fill="none"
-              stroke="${theme.frame}" stroke-width="1"/>
+                        <rect x="0.5" y="0.5" width="399" height="499"
+                              rx="24" fill="none"
+                              stroke="${theme.frame}" stroke-width="1"/>
 
-        <svg x="22" y="15" width="356" height="72"
-             viewBox="0 0 400 100"
-             preserveAspectRatio="xMidYMid meet">
-            ${artwork}
-        </svg>
+                        <svg x="22" y="15" width="356" height="72"
+                              viewBox="0 0 400 100"
+                              preserveAspectRatio="xMidYMid meet">
+                              ${artwork}
+                        </svg>
 
-        <text x="200" y="104" text-anchor="middle"
-              font-family="Arial, sans-serif"
-              font-size="9" font-weight="700"
-              letter-spacing="1.6"
-              fill="${theme.accent}">${eyebrow}</text>
+                        <text x="200" y="104" text-anchor="middle"
+                              font-family="Arial, sans-serif"
+                              font-size="9" font-weight="700"
+                              letter-spacing="1.6"
+                              fill="${theme.accent}">${eyebrow}</text>
 
-        <text x="200" y="128" text-anchor="middle"
-              font-family="Georgia, 'Times New Roman', serif"
-              font-size="23" font-weight="700"
-              fill="${theme.text}">${title}</text>
+                        <text x="200" y="128" text-anchor="middle"
+                              font-family="Georgia, 'Times New Roman', serif"
+                              font-size="23" font-weight="700"
+                              fill="${theme.text}">${title}</text>
 
-        <text x="200" y="153" text-anchor="middle"
-              font-family="Georgia, 'Times New Roman', serif"
-              font-size="11"
-              fill="${theme.muted}">${subtitle}</text>
+                        <text x="200" y="153" text-anchor="middle"
+                              font-family="Georgia, 'Times New Roman', serif"
+                              font-size="11"
+                              fill="${theme.muted}">${subtitle}</text>
 
-        <rect x="164" y="176" width="72" height="2"
-              fill="${theme.frame}"/>
+                        <rect x="164" y="176" width="72" height="2"
+                              fill="${theme.frame}"/>
 
-        <rect x="22" y="194" width="356" height="232"
-              rx="15" fill="#ffffff"
-              stroke="${theme.frame}" stroke-width="1"/>
+                        <rect x="22" y="194" width="356" height="232"
+                              rx="15" fill="#ffffff"
+                              stroke="${theme.frame}" stroke-width="1"/>
 
-        <image href="${qrHref}" x="97" y="207"
-               width="206" height="206"
-               preserveAspectRatio="xMidYMid meet"/>
+                        <image href="${qrHref}" x="97" y="207"
+                              width="206" height="206"
+                              preserveAspectRatio="xMidYMid meet"/>
 
-        <text x="200" y="448" text-anchor="middle"
-              font-family="Georgia, 'Times New Roman', serif"
-              font-size="12" font-weight="700"
-              fill="${theme.text}">Escanea para descubrir</text>
+                        <text x="200" y="448" text-anchor="middle"
+                              font-family="Georgia, 'Times New Roman', serif"
+                              font-size="12" font-weight="700"
+                              fill="${theme.text}">Escanea para descubrir</text>
 
-        <text x="200" y="461" text-anchor="middle"
-              font-family="Georgia, 'Times New Roman', serif"
-              font-size="11"
-              fill="${theme.accent}">tu sorpresa</text>
+                        <text x="200" y="461" text-anchor="middle"
+                              font-family="Georgia, 'Times New Roman', serif"
+                              font-size="11"
+                              fill="${theme.accent}">tu sorpresa</text>
 
-        <text x="200" y="486" text-anchor="middle"
-              font-family="Arial, sans-serif"
-              font-size="7" letter-spacing="1.5"
-              fill="${theme.muted}">TUSORPRESADIGITAL</text>
-    </g>
-</svg>`;
+                        <text x="200" y="486" text-anchor="middle"
+                              font-family="Arial, sans-serif"
+                              font-size="7" letter-spacing="1.5"
+                              fill="${theme.muted}">TUSORPRESADIGITAL</text>
+                  </g>
+            </svg>`;
 
         return sharp(Buffer.from(svg))
             .resize(1200, 1500)

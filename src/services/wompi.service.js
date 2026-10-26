@@ -3,33 +3,15 @@ const axios = require('axios');
 
 class WompiService {
 
-    // ============================================================
-    // CONFIGURATION
-    // ============================================================
-
     static getBaseUrl() {
 
-        if (process.env.WOMPI_BASE_URL) {
-            return process.env.WOMPI_BASE_URL;
-        }
-
-        if (
-            process.env.WOMPI_ENV === 'production'
-        ) {
-            return 'https://production.wompi.co/v1';
-        }
-
+        if (process.env.WOMPI_BASE_URL) return process.env.WOMPI_BASE_URL;
+        
+        if (process.env.WOMPI_ENV === 'production') return 'https://production.wompi.co/v1';
+        
         return 'https://sandbox.wompi.co/v1';
     }
 
-
-    // ============================================================
-    // INTEGRITY SIGNATURE
-    // ============================================================
-
-
-    
-    
     static generateIntegritySignature({ reference, amountInCents, currency = 'COP' }) {
         const secret = process.env.WOMPI_INTEGRITY_SECRET;
 
@@ -39,209 +21,88 @@ class WompiService {
 
         const value = `${reference}${amountInCents}${currency}${secret}`;
 
-        return crypto
-            .createHash('sha256')
-            .update(value)
-            .digest('hex');
+        return crypto.createHash('sha256').update(value).digest('hex');
     }
-
-
-
-    // ============================================================
-    // EVENT SIGNATURE
-    // ============================================================
 
     static validateEventSignature(event) {
 
-        const properties =
-            event?.signature?.properties;
+        const properties = event?.signature?.properties;
+        const checksum = event?.signature?.checksum;
+        const timestamp = event?.timestamp;
+        const secret = process.env.WOMPI_EVENTS_SECRET;
 
-        const checksum =
-            event?.signature?.checksum;
+        if (!Array.isArray(properties) || !properties.length || !checksum || !timestamp || !secret) return false;
 
-        const timestamp =
-            event?.timestamp;
+        const transaction = event?.data?.transaction;
 
-        const secret =
-            process.env.WOMPI_EVENTS_SECRET;
+        if (!transaction) return false;
 
+        const values = properties.map(property => {
 
-        if (
-            !Array.isArray(properties) ||
-            !properties.length ||
-            !checksum ||
-            !timestamp ||
-            !secret
-        ) {
-            return false;
-        }
+            const parts = property.split('.');
 
+            let value = event.data;
 
-        const transaction =
-            event?.data?.transaction;
-
-
-        if (!transaction) {
-            return false;
-        }
-
-
-        const values = properties.map(
-            property => {
-
-                const parts =
-                    property.split('.');
-
-                let value =
-                    event.data;
-
-                for (
-                    const part
-                    of parts
-                ) {
-
-                    value =
-                        value?.[part];
-                }
-
-                return value ?? '';
+            for (const part of parts) {
+                value = value?.[part];
             }
-        );
 
+            return value ?? '';
+        });
 
-        const concatenated =
-            values.join('') +
-            timestamp +
-            secret;
+        const concatenated = values.join('') + timestamp + secret;
 
+        const calculated = crypto.createHash('sha256').update(concatenated).digest('hex');
 
-        const calculated =
-            crypto
-                .createHash('sha256')
-                .update(concatenated)
-                .digest('hex');
-
-
-        return this.safeCompare(
-            calculated,
-            checksum
-        );
+        return this.safeCompare(calculated, checksum);
     }
 
+    static validateEventHeader(event, headerChecksum) {
 
-    // ============================================================
-    // OPTIONAL HEADER VALIDATION
-    // ============================================================
+        if (!headerChecksum) return true;
+        
+        const bodyChecksum = event?.signature?.checksum;
 
-    static validateEventHeader(
-        event,
-        headerChecksum
-    ) {
+        if (!bodyChecksum) return false;
 
-        if (!headerChecksum) {
-            return true;
-        }
-
-        const bodyChecksum =
-            event?.signature?.checksum;
-
-        if (!bodyChecksum) {
-            return false;
-        }
-
-        return this.safeCompare(
-            bodyChecksum,
-            headerChecksum
-        );
+        return this.safeCompare(bodyChecksum, headerChecksum);
     }
 
+    static safeCompare(first, second) {
 
-    // ============================================================
-    // SAFE STRING COMPARISON
-    // ============================================================
+        if (typeof first !== 'string' || typeof second !== 'string') return false;
+        
+        const firstBuffer = Buffer.from(first);
+        const secondBuffer = Buffer.from(second);
 
-    static safeCompare(
-        first,
-        second
-    ) {
+        if (firstBuffer.length !== secondBuffer.length) return false;
 
-        if (
-            typeof first !== 'string' ||
-            typeof second !== 'string'
-        ) {
-            return false;
-        }
-
-        const firstBuffer =
-            Buffer.from(first);
-
-        const secondBuffer =
-            Buffer.from(second);
-
-        if (
-            firstBuffer.length !==
-            secondBuffer.length
-        ) {
-            return false;
-        }
-
-        return crypto.timingSafeEqual(
-            firstBuffer,
-            secondBuffer
-        );
+        return crypto.timingSafeEqual(firstBuffer, secondBuffer);
     }
 
+    static async getTransaction( transactionId) {
 
-    // ============================================================
-    // GET TRANSACTION
-    // ============================================================
-
-    static async getTransaction(
-        transactionId
-    ) {
-
-        if (!transactionId) {
-            throw new Error(
-                'WOMPI_TRANSACTION_ID_REQUIRED'
-            );
-        }
-
-
+        if (!transactionId) throw new Error('WOMPI_TRANSACTION_ID_REQUIRED');
+        
         try {
 
-            const response =
-                await axios.get(
-                    `${this.getBaseUrl()}/transactions/${encodeURIComponent(transactionId)}`,
-                    {
-                        headers: {
-                            Accept:
-                                'application/json',
-
-                            Authorization:
-                                `Bearer ${process.env.WOMPI_PRIVATE_KEY}`
-                        },
-
-                        timeout: 10000
-                    }
-                );
-
+            const response = await axios.get(`${this.getBaseUrl()}/transactions/${encodeURIComponent(transactionId)}`, {
+                headers: {
+                    Accept: 'application/json',
+                    Authorization: `Bearer ${process.env.WOMPI_PRIVATE_KEY}`
+                },
+                timeout: 10000
+            });
 
             return response.data?.data;
 
         } catch (error) {
 
-            console.error(
-                'Wompi get transaction error:',
-                error.response?.data ||
-                error.message
-            );
+            console.error('Wompi get transaction error:', error.response?.data || error.message);
 
-            throw new Error(
-                'WOMPI_TRANSACTION_QUERY_FAILED'
-            );
+            throw new Error('WOMPI_TRANSACTION_QUERY_FAILED');
         }
     }
 }
-
 
 module.exports = WompiService;

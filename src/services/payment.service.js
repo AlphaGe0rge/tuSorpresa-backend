@@ -1,22 +1,11 @@
 const crypto = require('crypto');
 
-const {
-    Payment,
-    Surprise
-} = require('../models');
+const {Payment, Surprise} = require('../models');
 
-const WompiService =
-    require('./wompi.service');
-
-const EmailService =
-    require('./email.service');
-
+const WompiService = require('./wompi.service');
+const EmailService = require('./email.service');
 
 class PaymentService {
-
-    // ============================================================
-    // PRICE
-    // ============================================================
 
     static getPlanDetails(plan) {
 
@@ -40,55 +29,15 @@ class PaymentService {
         return selectedPlan;
     }
 
-    // ============================================================
-    // CREATE PAYMENT
-    // ============================================================
+    static async createPayment(surpriseId, plan, userId = null, editToken = null) {
 
-    static async createPayment(
-        surpriseId,
-        plan,
-        userId = null,
-        editToken = null
-    ) {
+        if (!surpriseId) throw new Error('SURPRISE_ID_REQUIRED');
+        
+        const surprise = await Surprise.findByPk(surpriseId);
 
-        if (!surpriseId) {
-            throw new Error(
-                'SURPRISE_ID_REQUIRED'
-            );
-        }
+        if (!surprise) throw new Error('SURPRISE_NOT_FOUND');
 
-
-        // --------------------------------------------------------
-        // Buscar sorpresa
-        // --------------------------------------------------------
-
-        const surprise =
-            await Surprise.findByPk(
-                surpriseId
-            );
-
-
-        if (!surprise) {
-            throw new Error(
-                'SURPRISE_NOT_FOUND'
-            );
-        }
-
-
-        // --------------------------------------------------------
-        // Authorization
-        // --------------------------------------------------------
-
-        await this.authorizeSurpriseAccess({
-            surprise,
-            userId,
-            editToken
-        });
-
-
-        // --------------------------------------------------------
-        // Estado
-        // --------------------------------------------------------
+        await this.authorizeSurpriseAccess({surprise, userId, editToken});
 
         if (surprise.status === 'ACTIVE') {
             throw new Error('SURPRISE_ALREADY_PAID');
@@ -102,39 +51,11 @@ class PaymentService {
             throw new Error('SURPRISE_NOT_PENDING_PAYMENT');
         }
 
-
-        // --------------------------------------------------------
-        // Price
-        // --------------------------------------------------------
-
-        /*
-         * El precio SIEMPRE sale del backend.
-         *
-         * Nunca recibimos amount desde Angular.
-         */
         const planDetails = this.getPlanDetails(plan);
         const priceCop = planDetails.priceCop;
         const amountInCents = priceCop * 100;
 
-        // --------------------------------------------------------
-        // Reference
-        // --------------------------------------------------------
-
-        const reference =
-            `SURPRISE-${surprise.id}-${crypto.randomUUID()}`;
-
-
-        // --------------------------------------------------------
-        // Integrity signature
-        // --------------------------------------------------------
-
-        console.log({
-            hasPublicKey: Boolean(process.env.WOMPI_PUBLIC_KEY),
-            publicKeyPrefix: process.env.WOMPI_PUBLIC_KEY?.split('_').slice(0, 2).join('_'),
-            hasIntegritySecret: Boolean(process.env.WOMPI_INTEGRITY_SECRET),
-            integritySecretPrefix: process.env.WOMPI_INTEGRITY_SECRET?.split('_').slice(0, 2).join('_'),
-            baseUrl: WompiService.getBaseUrl()
-        });
+        const reference = `SURPRISE-${surprise.id}-${crypto.randomUUID()}`;
 
         const signature = WompiService.generateIntegritySignature({
             reference,
@@ -142,15 +63,6 @@ class PaymentService {
             currency: 'COP'
         });
 
-        console.log({
-            reference,
-            amountInCents,
-            currency: 'COP',
-            signatureLength: signature.length,
-            signatureFormat: /^[a-f0-9]{64}$/i.test(signature)
-        });
-
-        // Create payment
         const payment = await Payment.create({
             surpriseId: surprise.id,
             provider: 'WOMPI',
@@ -162,7 +74,6 @@ class PaymentService {
             durationDays: planDetails.durationDays
         });
 
-        // Response
         return {
             paymentId: payment.id,
             reference,
@@ -174,181 +85,79 @@ class PaymentService {
         };
     }
 
-    // AUTHORIZE SURPRISE ACCESS
     static async authorizeSurpriseAccess({surprise, userId = null, editToken = null}) {
-
-        // --------------------------------------------------------
-        // Registered user
-        // --------------------------------------------------------
 
         if (userId) {
 
-            if (
-                surprise.userId !== userId
-            ) {
-                throw new Error(
-                    'SURPRISE_NOT_FOUND'
-                );
-            }
+            if (surprise.userId !== userId) throw new Error('SURPRISE_NOT_FOUND');
 
             return true;
         }
 
+        if (!editToken) throw new Error('PAYMENT_AUTH_REQUIRED');
 
-        // --------------------------------------------------------
-        // Guest
-        // --------------------------------------------------------
+        const validToken = await Surprise.verifyEditToken(editToken, surprise.editTokenHash);
 
-        if (!editToken) {
-            throw new Error(
-                'PAYMENT_AUTH_REQUIRED'
-            );
-        }
-
-
-        const validToken =
-            await Surprise.verifyEditToken(
-                editToken,
-                surprise.editTokenHash
-            );
-
-
-        if (!validToken) {
-            throw new Error(
-                'PAYMENT_AUTH_REQUIRED'
-            );
-        }
-
+        if (!validToken) throw new Error('PAYMENT_AUTH_REQUIRED'); 
 
         return true;
     }
 
+    static async getPaymentStatus(paymentId, userId = null, editToken = null) {
 
-    // ============================================================
-    // GET PAYMENT STATUS
-    // ============================================================
+        if (!paymentId) throw new Error('PAYMENT_ID_REQUIRED');
+        
+        const payment = await Payment.findOne({
+            where: {
+                id: paymentId
+            },
+            include: [
+                {
+                    model: Surprise,
+                    as: 'surprise'
+                }
+            ]
+        });
 
-    static async getPaymentStatus(
-        paymentId,
-        userId = null,
-        editToken = null
-    ) {
-
-        if (!paymentId) {
-            throw new Error(
-                'PAYMENT_ID_REQUIRED'
-            );
-        }
-
-
-        const payment =
-            await Payment.findOne({
-
-                where: {
-                    id: paymentId
-                },
-
-                include: [
-                    {
-                        model: Surprise,
-                        as: 'surprise'
-                    }
-                ]
-            });
-
-
-        if (!payment) {
-            throw new Error(
-                'PAYMENT_NOT_FOUND'
-            );
-        }
-
-
-        // --------------------------------------------------------
-        // Authorization
-        // --------------------------------------------------------
-
+        if (!payment) throw new Error('PAYMENT_NOT_FOUND');
+        
         await this.authorizeSurpriseAccess({
             surprise: payment.surprise,
             userId,
             editToken
         });
 
-
-        return this.toStatusResponse(
-            payment
-        );
+        return this.toStatusResponse(payment);
     }
 
+    static async syncWompiTransaction(transactionId, userId = null, editToken = null) {
 
-    // ============================================================
-    // SYNC FROM WOMPI TRANSACTION
-    // ============================================================
+        if (!transactionId) throw new Error('TRANSACTION_ID_REQUIRED');
+        
+        const transaction = await WompiService.getTransaction(transactionId);
 
-    static async syncWompiTransaction(
-        transactionId,
-        userId = null,
-        editToken = null
-    ) {
+        if (!transaction) throw new Error('WOMPI_TRANSACTION_NOT_FOUND');
+        
+        const payment = await Payment.findOne({
+            where: {
+                reference:
+                    transaction.reference
+            },
+            include: [
+                {
+                    model: Surprise,
+                    as: 'surprise'
+                }
+            ]
+        });
 
-        if (!transactionId) {
-            throw new Error(
-                'TRANSACTION_ID_REQUIRED'
-            );
-        }
-
-
-        const transaction =
-            await WompiService.getTransaction(
-                transactionId
-            );
-
-
-        if (!transaction) {
-            throw new Error(
-                'WOMPI_TRANSACTION_NOT_FOUND'
-            );
-        }
-
-
-        const payment =
-            await Payment.findOne({
-
-                where: {
-                    reference:
-                        transaction.reference
-                },
-
-                include: [
-                    {
-                        model: Surprise,
-                        as: 'surprise'
-                    }
-                ]
-            });
-
-
-        if (!payment) {
-            throw new Error(
-                'PAYMENT_NOT_FOUND'
-            );
-        }
-
-
-        // --------------------------------------------------------
-        // Authorization
-        // --------------------------------------------------------
+        if (!payment) throw new Error('PAYMENT_NOT_FOUND');        
 
         await this.authorizeSurpriseAccess({
             surprise: payment.surprise,
             userId,
             editToken
         });
-
-
-        // --------------------------------------------------------
-        // Apply transaction
-        // --------------------------------------------------------
 
         await this.applyTransaction(payment, transaction);
 
@@ -361,251 +170,75 @@ class PaymentService {
             ]
         });
 
-
-        return this.toStatusResponse(
-            payment
-        );
+        return this.toStatusResponse(payment);
     }
 
+    static async processWompiWebhook(event, headerChecksum) {
 
-    // ============================================================
-    // WEBHOOK
-    // ============================================================
+        if (event?.event !== 'transaction.updated') return;
+        
+        const expectedEnvironment = process.env.WOMPI_ENV === 'production' ? 'prod' : 'test';
 
-    static async processWompiWebhook(
-        event,
-        headerChecksum
-    ) {
-
-        if (
-            event?.event !==
-            'transaction.updated'
-        ) {
-            return;
+        if (event.environment && event.environment !== expectedEnvironment) {
+            throw new Error('INVALID_WOMPI_ENVIRONMENT');
         }
 
+        const validSignature = WompiService.validateEventSignature(event);
 
-        // --------------------------------------------------------
-        // Environment
-        // --------------------------------------------------------
-
-        const expectedEnvironment =
-            process.env.WOMPI_ENV ===
-            'production'
-                ? 'prod'
-                : 'test';
-
-
-        if (
-            event.environment &&
-            event.environment !==
-                expectedEnvironment
-        ) {
-
-            throw new Error(
-                'INVALID_WOMPI_ENVIRONMENT'
-            );
+        if (!validSignature) throw new Error('INVALID_WOMPI_SIGNATURE');
+        
+        if (!WompiService.validateEventHeader(event, headerChecksum)) {
+            throw new Error('INVALID_WOMPI_HEADER_SIGNATURE');
         }
 
+        const transaction = event.data?.transaction;
 
-        // --------------------------------------------------------
-        // Event signature
-        // --------------------------------------------------------
+        if (!transaction) throw new Error('INVALID_WOMPI_EVENT');
+        
+        const payment = await Payment.findOne({
+            where: {
+                reference:
+                    transaction.reference
+            },
+            include: [
+                {
+                    model: Surprise,
+                    as: 'surprise'
+                }
+            ]
+        });
 
-        const validSignature =
-            WompiService
-                .validateEventSignature(
-                    event
-                );
-
-
-        if (!validSignature) {
-            throw new Error(
-                'INVALID_WOMPI_SIGNATURE'
-            );
-        }
-
-
-        // --------------------------------------------------------
-        // Header signature
-        // --------------------------------------------------------
-
-        if (
-            !WompiService
-                .validateEventHeader(
-                    event,
-                    headerChecksum
-                )
-        ) {
-
-            throw new Error(
-                'INVALID_WOMPI_HEADER_SIGNATURE'
-            );
-        }
-
-
-        // --------------------------------------------------------
-        // Transaction
-        // --------------------------------------------------------
-
-        const transaction =
-            event.data?.transaction;
-
-
-        if (!transaction) {
-            throw new Error(
-                'INVALID_WOMPI_EVENT'
-            );
-        }
-
-
-        // --------------------------------------------------------
-        // Local payment
-        // --------------------------------------------------------
-
-        const payment =
-            await Payment.findOne({
-
-                where: {
-                    reference:
-                        transaction.reference
-                },
-
-                include: [
-                    {
-                        model: Surprise,
-                        as: 'surprise'
-                    }
-                ]
-            });
-
-
-        if (!payment) {
-
-            /*
-             * No existe una orden local.
-             *
-             * No debemos crear nada
-             * automáticamente.
-             */
-
-            throw new Error(
-                'PAYMENT_NOT_FOUND'
-            );
-        }
-
-
-        // --------------------------------------------------------
-        // Apply transaction
-        // --------------------------------------------------------
-
+        if (!payment) throw new Error('PAYMENT_NOT_FOUND');
+        
         await this.applyTransaction(payment, transaction);
     }
 
-
-    // ============================================================
-    // APPLY WOMPI TRANSACTION
-    // ============================================================
-
     static async applyTransaction(payment, transaction) {
 
-        /*
-         * Nunca confiamos únicamente
-         * en status.
-         */
-
-        // --------------------------------------------------------
-        // Currency
-        // --------------------------------------------------------
-
-        if (
-            transaction.currency !==
-            payment.currency
-        ) {
-
-            throw new Error(
-                'INVALID_PAYMENT_CURRENCY'
-            );
+        if (transaction.currency !== payment.currency) {
+            throw new Error('INVALID_PAYMENT_CURRENCY');
         }
 
-
-        // --------------------------------------------------------
-        // Amount
-        // --------------------------------------------------------
-
-        if (
-            Number(
-                transaction.amount_in_cents
-            ) !==
-            Number(
-                payment.amountInCents
-            )
-        ) {
-
-            throw new Error(
-                'INVALID_PAYMENT_AMOUNT'
-            );
+        if (Number(transaction.amount_in_cents) !== Number(payment.amountInCents)) {
+            throw new Error('INVALID_PAYMENT_AMOUNT');
+        }
+        
+        if (transaction.reference !== payment.reference) {
+            throw new Error('INVALID_PAYMENT_REFERENCE');
         }
 
+        const previousStatus = payment.status;
 
-        // --------------------------------------------------------
-        // Reference
-        // --------------------------------------------------------
+        payment.wompiTransactionId = transaction.id;
+        payment.status = transaction.status;
+        payment.paymentMethodType = transaction.payment_method_type || null;
+        payment.statusMessage = transaction.status_message || null;
 
-        if (
-            transaction.reference !==
-            payment.reference
-        ) {
+        if (transaction.status === 'APPROVED') {
 
-            throw new Error(
-                'INVALID_PAYMENT_REFERENCE'
-            );
-        }
-
-
-        const previousStatus =
-            payment.status;
-
-
-        // --------------------------------------------------------
-        // Update payment
-        // --------------------------------------------------------
-
-        payment.wompiTransactionId =
-            transaction.id;
-
-        payment.status =
-            transaction.status;
-
-        payment.paymentMethodType =
-            transaction.payment_method_type ||
-            null;
-
-        payment.statusMessage =
-            transaction.status_message ||
-            null;
-
-
-        // --------------------------------------------------------
-        // APPROVED
-        // --------------------------------------------------------
-
-        if (
-            transaction.status ===
-            'APPROVED'
-        ) {
-
-            payment.paidAt =
-                payment.paidAt ||
-                new Date();
-
+            payment.paidAt = payment.paidAt || new Date();
 
             await payment.save();
-
-
-            // ----------------------------------------------------
-            // Activate surprise
-            // ----------------------------------------------------
 
             if (payment.surprise.status !== 'ACTIVE') {
 
@@ -617,124 +250,49 @@ class PaymentService {
                 });
             }
 
-            // ----------------------------------------------------
-            // Email
-            // ----------------------------------------------------
-
-            /*
-             * Evitamos enviar nuevamente
-             * el correo si Wompi repite
-             * el webhook.
-             */
-
             if (previousStatus !== 'APPROVED') {
 
                 try {
 
                     await EmailService .sendSurpriseCreated({
-
-                            email:
-                                payment.surprise.email,
-
-                            recipientName:
-                                payment.surprise
-                                    .recipientName,
-
-                            publicToken:
-                                payment.surprise
-                                    .publicToken,
-
-                            editToken:
-                                null
-                        });
+                        email: payment.surprise.email,
+                        recipientName: payment.surprise.recipientName,
+                        publicToken: payment.surprise.publicToken,
+                        editToken: null
+                    });
 
                 } catch (error) {
-
-                    console.error(
-                        'Unable to send paid surprise email:',
-                        error
-                    );
+                    console.error('Unable to send paid surprise email:', error);
                 }
             }
 
         } else {
 
-            // ----------------------------------------------------
-            // Other statuses
-            // ----------------------------------------------------
-
             await payment.save();
 
-
-            /*
-             * Si fue anulada después
-             * de haber sido aprobada,
-             * desactivamos la sorpresa.
-             */
-
-            if (
-                transaction.status ===
-                'VOIDED'
-            ) {
-
-                await payment.surprise.update({
-                    status:
-                        'DISABLED'
-                });
+            if (transaction.status === 'VOIDED') {
+                await payment.surprise.update({status: 'DISABLED'});
             }
         }
     }
 
-
-    // ============================================================
-    // RESPONSE
-    // ============================================================
-
-    static toStatusResponse(
-        payment
-    ) {
-
+    static toStatusResponse(payment) {
         return {
-
-            paymentId:
-                payment.id,
-
-            reference:
-                payment.reference,
-
-            status:
-                payment.status,
-
-            amountInCents:
-                payment.amountInCents,
-
-            currency:
-                payment.currency,
-
-            paymentMethodType:
-                payment.paymentMethodType,
-
-            statusMessage:
-                payment.statusMessage,
-
-            paidAt:
-                payment.paidAt,
-
+            paymentId: payment.id,
+            reference: payment.reference,
+            status: payment.status,
+            amountInCents: payment.amountInCents,
+            currency: payment.currency,
+            paymentMethodType: payment.paymentMethodType,
+            statusMessage: payment.statusMessage,
+            paidAt: payment.paidAt,
             surprise: {
-
-                id:
-                    payment.surprise.id,
-
-                status:
-                    payment.surprise.status,
-
-                publicToken:
-                    payment.surprise.publicToken
+                id: payment.surprise.id,
+                status: payment.surprise.status,
+                publicToken: payment.surprise.publicToken
             }
         };
     }
 }
 
-
-module.exports =
-    PaymentService;
+module.exports = PaymentService;

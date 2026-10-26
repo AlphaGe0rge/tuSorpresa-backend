@@ -1,9 +1,7 @@
 const crypto = require('crypto');
 
 function generateToken(bytes = 16) {
-    return crypto
-        .randomBytes(bytes)
-        .toString('base64url');
+    return crypto.randomBytes(bytes).toString('base64url');
 }
 
 function generatePublicToken() {
