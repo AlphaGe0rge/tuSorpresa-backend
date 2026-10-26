@@ -1,96 +1,27 @@
 const crypto = require('crypto');
 
-const Surprise =
-    require('../models/surprise.model');
-
-const R2Service =
-    require('./r2.service');
-
-const EmailService =
-    require('./email.service');
-const QrCardService = require('./qr-card.service');
-
+const Surprise = require('../models/surprise.model');
+const R2Service = require('./r2.service');
 
 class SurpriseService {
 
-
-    // ============================================================
-    // TOKEN
-    // ============================================================
-
     static generateToken() {
-
-        return crypto
-            .randomBytes(32)
-            .toString('hex');
+        return crypto.randomBytes(32).toString('hex');
     }
-
-
-    // ============================================================
-    // HASH EDIT TOKEN
-    // ============================================================
 
     static hashEditToken(token) {
-
-        return crypto
-            .createHash('sha512')
-            .update(token)
-            .digest('hex');
+        return crypto.createHash('sha512').update(token).digest('hex');
     }
-
-
-    // ============================================================
-    // CREATE
-    // ============================================================
 
     static async create(data,userId = null) {
 
         this.validateData(data);
 
-        /*
-        |--------------------------------------------------------------------------
-        | USER ID
-        |--------------------------------------------------------------------------
-        |
-        | Puede ser:
-        |
-        | Usuario autenticado:
-        |     UUID
-        |
-        | Invitado:
-        |     null
-        |
-        */
+        const normalizedUserId = userId || null;
 
-        const normalizedUserId =
-            userId || null;
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | TOKENS
-        |--------------------------------------------------------------------------
-        */
-
-        const publicToken =
-            this.generateToken();
-
-
-        const editToken =
-            this.generateToken();
-
-
-        const editTokenHash =
-            this.hashEditToken(
-                editToken
-            );
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | CREATE SURPRISE
-        |--------------------------------------------------------------------------
-        */
+        const publicToken = this.generateToken();
+        const editToken = this.generateToken();
+        const editTokenHash = this.hashEditToken(editToken);
 
         const surprise = await Surprise.create({
             userId: normalizedUserId,
@@ -107,11 +38,6 @@ class SurpriseService {
             expiresAt: data.expiresAt || null,
             status: 'PENDING_PAYMENT'
         });
-        /*
-        |--------------------------------------------------------------------------
-        | RESPONSE
-        |--------------------------------------------------------------------------
-        */
 
         return {
             id: surprise.id,
@@ -120,1342 +46,475 @@ class SurpriseService {
         };
     }
 
-
-    // ============================================================
-    // GET USER SURPRISES
-    // ============================================================
-
     static async getByUserId(userId) {
 
-        if (!userId) {
-
-            throw new Error(
-                'USER_REQUIRED'
-            );
-        }
-
-
-        const surprises =
-            await Surprise.findAll({
-
-                where: {
-                    userId
-                },
-
-                order: [
-                    [
-                        'createdAt',
-                        'DESC'
-                    ]
-                ],
-
-                attributes: {
-
-                    exclude: [
-                        'editTokenHash'
-                    ]
-
-                }
-
-            });
-
+        if (!userId) throw new Error('USER_REQUIRED');
+        
+        const surprises = await Surprise.findAll({
+            where: {
+                userId
+            },
+            order: [
+                ['createdAt', 'DESC']
+            ],
+            attributes: {
+                exclude: ['editTokenHash']
+            }
+        });
 
         return surprises;
     }
 
+    static async getMyById(surpriseId, userId) {
 
-    // ============================================================
-    // GET MY SURPRISE BY ID
-    // ============================================================
+        if (!userId) throw new Error('USER_REQUIRED');
+        
+        if (!surpriseId) throw new Error('SURPRISE_NOT_FOUND');
+        
+        const surprise = await Surprise.findOne({
+            where: {
+                id: surpriseId,
+                userId
+            },
+            attributes: {
+                exclude: ['editTokenHash']
+            }
+        });
 
-    static async getMyById(
-        surpriseId,
-        userId
-    ) {
-
-        if (!userId) {
-
-            throw new Error(
-                'USER_REQUIRED'
-            );
-        }
-
-
-        if (!surpriseId) {
-
-            throw new Error(
-                'SURPRISE_NOT_FOUND'
-            );
-        }
-
-
-        const surprise =
-            await Surprise.findOne({
-
-                where: {
-
-                    id:
-                        surpriseId,
-
-                    userId
-
-                },
-
-                attributes: {
-
-                    exclude: [
-                        'editTokenHash'
-                    ]
-
-                }
-
-            });
-
-
-        if (!surprise) {
-
-            throw new Error(
-                'SURPRISE_NOT_FOUND'
-            );
-        }
-
-
-        await this.ensureAvailable(
-            surprise
-        );
-
+        if (!surprise) throw new Error('SURPRISE_NOT_FOUND');
+        
+        await this.ensureAvailable(surprise);
 
         return surprise;
     }
 
+    static async updateMyById(surpriseId, userId, data) {
 
-    // ============================================================
-    // UPDATE MY SURPRISE
-    // ============================================================
+        if (!userId) throw new Error('USER_REQUIRED');
 
-    static async updateMyById(
-        surpriseId,
-        userId,
-        data
-    ) {
+        if (!surpriseId) throw new Error('SURPRISE_NOT_FOUND');
+        
+        const surprise = await Surprise.findOne({
+            where: {
+                id: surpriseId,
+                userId
+            }
+        });
 
-        if (!userId) {
+        if (!surprise) throw new Error('SURPRISE_NOT_FOUND');
+        
+        await this.ensureAvailable(surprise);
 
-            throw new Error(
-                'USER_REQUIRED'
-            );
-        }
-
-
-        if (!surpriseId) {
-
-            throw new Error(
-                'SURPRISE_NOT_FOUND'
-            );
-        }
-
-
-        const surprise =
-            await Surprise.findOne({
-
-                where: {
-
-                    id:
-                        surpriseId,
-
-                    userId
-
-                }
-
-            });
-
-
-        if (!surprise) {
-
-            throw new Error(
-                'SURPRISE_NOT_FOUND'
-            );
-        }
-
-
-        await this.ensureAvailable(
-            surprise
-        );
-
-
-        const validated =
-            this.validateData(
-                data
-            );
-
+        const validated = this.validateData(data);
 
         await surprise.update({
-
-            template:
-                validated.template,
-
-            recipientName:
-                validated.recipientName,
-
-            email:
-                validated.email,
-
-            senderName:
-                validated.senderName,
-
-            title:
-                validated.title,
-
-            message:
-                validated.message,
-
-            dynamicData:
-                validated.dynamicData,
-
-            expiresAt:
-                validated.expiresAt
+            template: validated.template,
+            recipientName: validated.recipientName,
+            email: validated.email,
+            senderName: validated.senderName,
+            title: validated.title,
+            message: validated.message,
+            dynamicData: validated.dynamicData,
+            expiresAt: validated.expiresAt
 
         });
 
-
-        return this.serializeSurprise(
-            surprise
-        );
+        return this.serializeSurprise(surprise);
     }
-
-
-    // ============================================================
-    // GET PUBLIC SURPRISE
-    // ============================================================
 
     static async getPublic(publicToken) {
 
         const surprise = await Surprise.findOne({
-
             where: {
                 publicToken
             },
-
             attributes: [
-
                 'id',
-
                 'template',
-
                 'recipientName',
-
                 'senderName',
-
                 'title',
-
                 'message',
-
                 'photos',
-
                 'dynamicData',
-
                 'createdAt',
-
                 'updatedAt',
-
                 'expiresAt',
-
                 'status'
-
             ]
-
         });
 
+        if (!surprise) throw new Error('SURPRISE_NOT_FOUND');
 
-        if (!surprise) {
-
-            throw new Error(
-                'SURPRISE_NOT_FOUND'
-            );
+        if (surprise.status === 'PENDING_PAYMENT') {
+            throw new Error('SURPRISE_NOT_FOUND');
         }
 
-
-        /*
-        |--------------------------------------------------------------------------
-        | PENDING PAYMENT
-        |--------------------------------------------------------------------------
-        |
-        | Una sorpresa pendiente de pago no debe
-        | poder visualizarse públicamente.
-        |
-        */
-
-        if (
-            surprise.status ===
-            'PENDING_PAYMENT'
-        ) {
-
-            throw new Error(
-                'SURPRISE_NOT_FOUND'
-            );
-        }
-
-
-        await this.ensureAvailable(
-            surprise
-        );
-
+        await this.ensureAvailable(surprise);
 
         return surprise;
     }
 
+    static async getByEditToken(editToken) {
 
-    // ============================================================
-    // GET BY EDIT TOKEN
-    // ============================================================
+        if (!editToken) throw new Error('SURPRISE_NOT_FOUND');
+        
+        const editTokenHash = this.hashEditToken(editToken);
 
-    static async getByEditToken(
-        editToken
-    ) {
+        const surprise = await Surprise.findOne({
+            where: {
+                editTokenHash
+            }
+        });
 
-        if (!editToken) {
+        if (!surprise) throw new Error('SURPRISE_NOT_FOUND');
+        
+        await this.ensureAvailable(surprise);
 
-            throw new Error(
-                'SURPRISE_NOT_FOUND'
-            );
-        }
-
-
-        const editTokenHash =
-            this.hashEditToken(
-                editToken
-            );
-
-
-        const surprise =
-            await Surprise.findOne({
-
-                where: {
-                    editTokenHash
-                }
-
-            });
-
-
-        if (!surprise) {
-
-            throw new Error(
-                'SURPRISE_NOT_FOUND'
-            );
-        }
-
-
-        await this.ensureAvailable(
-            surprise
-        );
-
-
-        return this.serializeSurprise(
-            surprise
-        );
+        return this.serializeSurprise(surprise);
     }
 
+    static async updateByEditToken(editToken, data) {
 
-    // ============================================================
-    // UPDATE BY EDIT TOKEN
-    // ============================================================
+        if (!editToken) throw new Error('SURPRISE_NOT_FOUND');
+        
+        const editTokenHash = this.hashEditToken(editToken);
 
-    static async updateByEditToken(
-        editToken,
-        data
-    ) {
+        const surprise = await Surprise.findOne({
+            where: {
+                editTokenHash
+            }
+        });
 
-        if (!editToken) {
+        if (!surprise) throw new Error('SURPRISE_NOT_FOUND');
+        
+        await this.ensureAvailable(surprise);
 
-            throw new Error(
-                'SURPRISE_NOT_FOUND'
-            );
-        }
-
-
-        const editTokenHash =
-            this.hashEditToken(
-                editToken
-            );
-
-
-        const surprise =
-            await Surprise.findOne({
-
-                where: {
-                    editTokenHash
-                }
-
-            });
-
-
-        if (!surprise) {
-
-            throw new Error(
-                'SURPRISE_NOT_FOUND'
-            );
-        }
-
-
-        await this.ensureAvailable(
-            surprise
-        );
-
-
-        const validated =
-            this.validateData(
-                data
-            );
-
+        const validated = this.validateData(data);
 
         await surprise.update({
-
-            template:
-                validated.template,
-
-            recipientName:
-                validated.recipientName,
-
-            email:
-                validated.email,
-
-            senderName:
-                validated.senderName,
-
-            title:
-                validated.title,
-
-            message:
-                validated.message,
-
-            dynamicData:
-                validated.dynamicData,
-
-            expiresAt:
-                validated.expiresAt
-
+            template: validated.template,
+            recipientName: validated.recipientName,
+            email: validated.email,
+            senderName: validated.senderName,
+            title: validated.title,
+            message: validated.message,
+            dynamicData: validated.dynamicData,
+            expiresAt: validated.expiresAt
         });
 
-
-        return this.serializeSurprise(
-            surprise
-        );
+        return this.serializeSurprise(surprise);
     }
 
+    static async uploadPhotosByUser(surpriseId, userId, files) {
 
-    // ============================================================
-    // UPLOAD PHOTOS BY USER
-    // ============================================================
+        if (!userId) throw new Error('USER_REQUIRED');
 
-    static async uploadPhotosByUser(
-        surpriseId,
-        userId,
-        files
-    ) {
+        const surprise = await this.findOwnedSurprise(surpriseId, userId);
 
-        if (!userId) {
+        return this.uploadPhotosToSurprise(surprise, files);
+    }
 
-            throw new Error(
-                'USER_REQUIRED'
-            );
-        }
+    static async deletePhotoByUser(surpriseId, userId, photoKey) {
 
+        if (!userId) throw new Error('USER_REQUIRED');
 
-        const surprise =
-            await this.findOwnedSurprise(
-                surpriseId,
+        const surprise = await this.findOwnedSurprise(surpriseId, userId);
+
+        return this.deletePhotoFromSurprise(surprise, photoKey);
+    }
+
+    static async uploadPhotos(editToken, files) {
+
+        if (!editToken) throw new Error('SURPRISE_NOT_FOUND');
+        
+        const editTokenHash = this.hashEditToken(editToken);
+
+        const surprise = await Surprise.findOne({
+            where: {
+                editTokenHash
+            }
+        });
+
+        if (!surprise) throw new Error('SURPRISE_NOT_FOUND');
+        
+        return this.uploadPhotosToSurprise(surprise, files);
+    }
+
+    static async deletePhoto(editToken, photoKey) {
+
+        if (!editToken) throw new Error('SURPRISE_NOT_FOUND');
+        
+        const editTokenHash = this.hashEditToken(editToken);
+
+        const surprise = await Surprise.findOne({
+            where: {
+                editTokenHash
+            }
+        });
+
+        if (!surprise) throw new Error('SURPRISE_NOT_FOUND');
+    
+        return this.deletePhotoFromSurprise(surprise, photoKey);
+    }
+
+    static async findOwnedSurprise(surpriseId, userId) {
+
+        if (!surpriseId) throw new Error('SURPRISE_NOT_FOUND');
+        
+        const surprise = await Surprise.findOne({
+            where: {
+                id: surpriseId,
                 userId
-            );
+            }
+        });
 
-
-        return this.uploadPhotosToSurprise(
-            surprise,
-            files
-        );
-    }
-
-
-    // ============================================================
-    // DELETE PHOTO BY USER
-    // ============================================================
-
-    static async deletePhotoByUser(
-        surpriseId,
-        userId,
-        photoKey
-    ) {
-
-        if (!userId) {
-
-            throw new Error(
-                'USER_REQUIRED'
-            );
-        }
-
-
-        const surprise =
-            await this.findOwnedSurprise(
-                surpriseId,
-                userId
-            );
-
-
-        return this.deletePhotoFromSurprise(
-            surprise,
-            photoKey
-        );
-    }
-
-
-    // ============================================================
-    // UPLOAD PHOTOS BY EDIT TOKEN
-    // ============================================================
-
-    static async uploadPhotos(
-        editToken,
-        files
-    ) {
-
-        if (!editToken) {
-
-            throw new Error(
-                'SURPRISE_NOT_FOUND'
-            );
-        }
-
-
-        const editTokenHash =
-            this.hashEditToken(
-                editToken
-            );
-
-
-        const surprise =
-            await Surprise.findOne({
-
-                where: {
-                    editTokenHash
-                }
-
-            });
-
-
-        if (!surprise) {
-
-            throw new Error(
-                'SURPRISE_NOT_FOUND'
-            );
-        }
-
-
-        return this.uploadPhotosToSurprise(
-            surprise,
-            files
-        );
-    }
-
-
-    // ============================================================
-    // DELETE PHOTO BY EDIT TOKEN
-    // ============================================================
-
-    static async deletePhoto(
-        editToken,
-        photoKey
-    ) {
-
-        if (!editToken) {
-
-            throw new Error(
-                'SURPRISE_NOT_FOUND'
-            );
-        }
-
-
-        const editTokenHash =
-            this.hashEditToken(
-                editToken
-            );
-
-
-        const surprise =
-            await Surprise.findOne({
-
-                where: {
-                    editTokenHash
-                }
-
-            });
-
-
-        if (!surprise) {
-
-            throw new Error(
-                'SURPRISE_NOT_FOUND'
-            );
-        }
-
-
-        return this.deletePhotoFromSurprise(
-            surprise,
-            photoKey
-        );
-    }
-
-
-    // ============================================================
-    // FIND OWNED SURPRISE
-    // ============================================================
-
-    static async findOwnedSurprise(
-        surpriseId,
-        userId
-    ) {
-
-        if (!surpriseId) {
-
-            throw new Error(
-                'SURPRISE_NOT_FOUND'
-            );
-        }
-
-
-        const surprise =
-            await Surprise.findOne({
-
-                where: {
-
-                    id:
-                        surpriseId,
-
-                    userId
-
-                }
-
-            });
-
-
-        if (!surprise) {
-
-            throw new Error(
-                'SURPRISE_NOT_FOUND'
-            );
-        }
-
-
-        await this.ensureAvailable(
-            surprise
-        );
-
+        if (!surprise) throw new Error('SURPRISE_NOT_FOUND');
+        
+        await this.ensureAvailable(surprise);
 
         return surprise;
     }
 
+    static async uploadPhotosToSurprise(surprise, files) {
 
-    // ============================================================
-    // UPLOAD PHOTOS
-    // ============================================================
-
-    static async uploadPhotosToSurprise(
-        surprise,
-        files
-    ) {
-
-        if (
-            !Array.isArray(files) ||
-            !files.length
-        ) {
-
-            throw new Error(
-                'PHOTOS_REQUIRED'
-            );
+        if (!Array.isArray(files) || !files.length) {
+            throw new Error('PHOTOS_REQUIRED');
         }
 
+        if (files.length > 3) throw new Error('TOO_MANY_PHOTOS');
 
-        if (
-            files.length > 3
-        ) {
+        await this.ensureAvailable(surprise);
 
-            throw new Error(
-                'TOO_MANY_PHOTOS'
-            );
+        const currentPhotos = Array.isArray(surprise.photos) ? surprise.photos : [];
+
+        if (currentPhotos.length + files.length > 3) {
+            throw new Error('TOO_MANY_PHOTOS');
         }
-
-
-        await this.ensureAvailable(
-            surprise
-        );
-
-
-        const currentPhotos =
-            Array.isArray(
-                surprise.photos
-            )
-                ? surprise.photos
-                : [];
-
-
-        if (
-            currentPhotos.length +
-            files.length >
-            3
-        ) {
-
-            throw new Error(
-                'TOO_MANY_PHOTOS'
-            );
-        }
-
 
         const uploadedPhotos = [];
 
-
         try {
 
-            for (
-                const file of files
-            ) {
+            for (const file of files) {
 
-                const extension =
-                    this.getExtension(
-                        file.originalname
-                    );
+                const extension = this.getExtension(file.originalname);
 
-
-                if (
-                    ![
-                        'jpg',
-                        'jpeg',
-                        'png',
-                        'webp',
-                        'gif'
-                    ].includes(
-                        extension
-                    )
-                ) {
-
-                    throw new Error(
-                        'INVALID_PHOTO_TYPE'
-                    );
+                if (!['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(extension)) {
+                    throw new Error('INVALID_PHOTO_TYPE');
                 }
 
+                const fileName = `${crypto.randomUUID()}.${extension}`;
 
-                const fileName =
-                    `${crypto.randomUUID()}.${extension}`;
+                const key = `surprises/${surprise.publicToken}/${fileName}`;
 
-
-                const key =
-                    `surprises/${surprise.publicToken}/${fileName}`;
-
-
-                const photo =
-                    await R2Service.upload(
-                        key,
-                        file.buffer,
-                        file.mimetype
-                    );
-
-
-                uploadedPhotos.push(
-                    photo
+                const photo = await R2Service.upload(
+                    key,
+                    file.buffer,
+                    file.mimetype
                 );
+
+                uploadedPhotos.push(photo);
             }
 
+            const photos = [...currentPhotos, ...uploadedPhotos];
 
-            const photos = [
-                ...currentPhotos,
-                ...uploadedPhotos
-            ];
-
-
-            await surprise.update({
-                photos
-            });
-
+            await surprise.update({photos});
 
             return {
                 photos
-            };
-
+            }
 
         } catch (error) {
 
-            /*
-            |--------------------------------------------------------------------------
-            | ROLLBACK R2
-            |--------------------------------------------------------------------------
-            */
-
-            for (
-                const photo of uploadedPhotos
-            ) {
+            for (const photo of uploadedPhotos) {
 
                 try {
 
-                    await R2Service.delete(
-                        photo.key
-                    );
+                    await R2Service.delete(photo.key);
 
                 } catch (deleteError) {
-
-                    console.error(
-                        'Unable to rollback R2 photo:',
-                        deleteError
-                    );
+                    console.error('Unable to rollback R2 photo:', deleteError);
                 }
             }
-
 
             throw error;
         }
     }
 
+    static async deletePhotoFromSurprise(surprise, photoKey) {
 
-    // ============================================================
-    // DELETE PHOTO
-    // ============================================================
+        if (!photoKey) throw new Error('PHOTO_NOT_FOUND');
+        
+        await this.ensureAvailable(surprise);
 
-    static async deletePhotoFromSurprise(
-        surprise,
-        photoKey
-    ) {
+        const currentPhotos = Array.isArray(surprise.photos) ? surprise.photos : [];
 
-        if (!photoKey) {
+        const photo = currentPhotos.find(item => item.key === photoKey);
 
-            throw new Error(
-                'PHOTO_NOT_FOUND'
-            );
-        }
+        if (!photo) throw new Error('PHOTO_NOT_FOUND');
+        
+        await R2Service.delete(photo.key);
 
+        const photos = currentPhotos.filter(item => item.key !== photoKey);
 
-        await this.ensureAvailable(
-            surprise
-        );
-
-
-        const currentPhotos =
-            Array.isArray(
-                surprise.photos
-            )
-                ? surprise.photos
-                : [];
-
-
-        const photo =
-            currentPhotos.find(
-                item =>
-                    item.key === photoKey
-            );
-
-
-        if (!photo) {
-
-            throw new Error(
-                'PHOTO_NOT_FOUND'
-            );
-        }
-
-
-        await R2Service.delete(
-            photo.key
-        );
-
-
-        const photos =
-            currentPhotos.filter(
-                item =>
-                    item.key !== photoKey
-            );
-
-
-        await surprise.update({
-            photos
-        });
-
+        await surprise.update({photos});
 
         return {
             photos
         };
     }
 
+    static async ensureAvailable(surprise) {
 
-    // ============================================================
-    // ENSURE AVAILABLE
-    // ============================================================
-
-    static async ensureAvailable(
-        surprise
-    ) {
-
-        if (
-            surprise.status ===
-            'DELETED'
-        ) {
-
-            throw new Error(
-                'SURPRISE_NOT_FOUND'
-            );
+        if (surprise.status === 'DELETED') {
+            throw new Error('SURPRISE_NOT_FOUND');
         }
 
+        if (surprise.status === 'EXPIRED' || this.isExpired(surprise)) {
 
-        if (
-            surprise.status ===
-                'EXPIRED' ||
-            this.isExpired(
-                surprise
-            )
-        ) {
-
-            if (
-                surprise.status !==
-                'EXPIRED'
-            ) {
-
-                await surprise.update({
-                    status: 'EXPIRED'
-                });
+            if (surprise.status !== 'EXPIRED') {
+                await surprise.update({status: 'EXPIRED'});
             }
 
-
-            throw new Error(
-                'SURPRISE_EXPIRED'
-            );
+            throw new Error('SURPRISE_EXPIRED');
         }
     }
 
+    static isExpired(surprise) {
 
-    // ============================================================
-    // IS EXPIRED
-    // ============================================================
-
-    static isExpired(
-        surprise
-    ) {
-
-        if (!surprise.expiresAt) {
-
-            return false;
-        }
-
-
-        return (
-            new Date(
-                surprise.expiresAt
-            ) <= new Date()
-        );
+        if (!surprise.expiresAt) return false;
+        
+        return (new Date(surprise.expiresAt) <= new Date());
     }
 
-
-    // ============================================================
-    // GET EXTENSION
-    // ============================================================
-
-    static getExtension(
-        filename
-    ) {
-
-        return filename
-            .split('.')
-            .pop()
-            ?.toLowerCase() ?? '';
+    static getExtension(filename) {
+        return filename.split('.').pop()?.toLowerCase() ?? '';
     }
 
-
-    // ============================================================
-    // SERIALIZE
-    // ============================================================
-
-    static serializeSurprise(
-        surprise
-    ) {
+    static serializeSurprise(surprise) {
 
         return {
-
-            id:
-                surprise.id,
-
-            template:
-                surprise.template,
-
-            recipientName:
-                surprise.recipientName,
-
-            senderName:
-                surprise.senderName,
-
-            email:
-                surprise.email,
-
-            title:
-                surprise.title,
-
-            message:
-                surprise.message,
-
-            photos:
-                surprise.photos || [],
-
-            dynamicData:
-                surprise.dynamicData || {},
-
-            publicToken:
-                surprise.publicToken,
-
-            status:
-                surprise.status,
-
-            createdAt:
-                surprise.createdAt,
-
-            updatedAt:
-                surprise.updatedAt,
-
-            expiresAt:
-                surprise.expiresAt
-
+            id: surprise.id,
+            template: surprise.template,
+            recipientName: surprise.recipientName,
+            senderName: surprise.senderName,
+            email: surprise.email,
+            title: surprise.title,
+            message: surprise.message,
+            photos: surprise.photos || [],
+            dynamicData: surprise.dynamicData || {},
+            publicToken: surprise.publicToken,
+            status: surprise.status,
+            createdAt: surprise.createdAt,
+            updatedAt: surprise.updatedAt,
+            expiresAt: surprise.expiresAt
         };
     }
 
+    static validateData(data) {
 
-    // ============================================================
-    // VALIDATE DATA
-    // ============================================================
-
-    static validateData(
-        data
-    ) {
-
-        if (
-            !data ||
-            typeof data !== 'object' ||
-            Array.isArray(data)
-        ) {
-
-            throw new Error(
-                'INVALID_DATA'
-            );
+        if (!data || typeof data !== 'object' || Array.isArray(data)) {
+            throw new Error('INVALID_DATA');
         }
 
-
-        /*
-        |--------------------------------------------------------------------------
-        | TEMPLATE
-        |--------------------------------------------------------------------------
-        */
-
-        if (
-            typeof data.template !==
-            'string'
-        ) {
-
-            throw new Error(
-                'TEMPLATE_REQUIRED'
-            );
+        if (typeof data.template !== 'string') {
+            throw new Error('TEMPLATE_REQUIRED');
         }
 
-
-        if (
-            !data.template.trim()
-        ) {
-
-            throw new Error(
-                'TEMPLATE_REQUIRED'
-            );
+        if (!data.template.trim()) {
+            throw new Error('TEMPLATE_REQUIRED');
         }
 
-
-        if (
-            data.template.length > 100
-        ) {
-
-            throw new Error(
-                'INVALID_TEMPLATE'
-            );
+        if (data.template.length > 100) {
+            throw new Error('INVALID_TEMPLATE');
         }
-
 
         const AVAILABLE_TEMPLATES = [
-
             'love-01',
-
             'love-02',
-
             'birthday-01',
-
             'friendship-01',
-
             'invitation-01',
-
             'anniversary-01'
-
         ];
 
-
-        if (
-            !AVAILABLE_TEMPLATES.includes(
-                data.template
-            )
-        ) {
-
-            throw new Error(
-                'INVALID_TEMPLATE'
-            );
+        if (!AVAILABLE_TEMPLATES.includes(data.template)) {
+            throw new Error('INVALID_TEMPLATE');
         }
 
-
-        /*
-        |--------------------------------------------------------------------------
-        | RECIPIENT
-        |--------------------------------------------------------------------------
-        */
-
-        if (
-            typeof data.recipientName !==
-            'string'
-        ) {
-
-            throw new Error(
-                'INVALID_RECIPIENT_NAME'
-            );
+        if (typeof data.recipientName !== 'string') {
+            throw new Error('INVALID_RECIPIENT_NAME');
         }
 
-
-        if (
-            !data.recipientName.trim()
-        ) {
-
-            throw new Error(
-                'RECIPIENT_NAME_REQUIRED'
-            );
+        if (!data.recipientName.trim()) {
+            throw new Error('RECIPIENT_NAME_REQUIRED');
         }
 
-
-        if (
-            data.recipientName.length > 100
-        ) {
-
-            throw new Error(
-                'INVALID_RECIPIENT_NAME'
-            );
+        if (data.recipientName.length > 100) {
+            throw new Error('INVALID_RECIPIENT_NAME');
         }
 
-
-        /*
-        |--------------------------------------------------------------------------
-        | EMAIL
-        |--------------------------------------------------------------------------
-        */
-
-        if (
-            typeof data.email !==
-            'string'
-        ) {
-
-            throw new Error(
-                'INVALID_EMAIL'
-            );
+        if (typeof data.email !== 'string') {
+            throw new Error('INVALID_EMAIL');
         }
 
-
-        if (
-            !data.email.trim()
-        ) {
-
-            throw new Error(
-                'EMAIL_REQUIRED'
-            );
+        if (!data.email.trim()) {
+            throw new Error('EMAIL_REQUIRED');
         }
 
-
-        if (
-            data.email.length > 255
-        ) {
-
-            throw new Error(
-                'INVALID_EMAIL'
-            );
+        if (data.email.length > 255) {
+            throw new Error('INVALID_EMAIL');
         }
 
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-        const emailRegex =
-            /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-
-        if (
-            !emailRegex.test(
-                data.email.trim()
-            )
-        ) {
-
-            throw new Error(
-                'INVALID_EMAIL'
-            );
+        if (!emailRegex.test(data.email.trim())) {
+            throw new Error('INVALID_EMAIL');
         }
 
-
-        /*
-        |--------------------------------------------------------------------------
-        | SENDER
-        |--------------------------------------------------------------------------
-        */
-
-        if (
-            data.senderName !== undefined &&
-            data.senderName !== null &&
-            typeof data.senderName !== 'string'
-        ) {
-
-            throw new Error(
-                'INVALID_SENDER_NAME'
-            );
+        if (data.senderName !== undefined && data.senderName !== null && typeof data.senderName !== 'string') {
+            throw new Error('INVALID_SENDER_NAME');
         }
 
-
-        if (
-            typeof data.senderName ===
-            'string' &&
-            data.senderName.length > 100
-        ) {
-
-            throw new Error(
-                'INVALID_SENDER_NAME'
-            );
+        if (typeof data.senderName === 'string' && data.senderName.length > 100) {
+            throw new Error('INVALID_SENDER_NAME');
         }
 
-
-        /*
-        |--------------------------------------------------------------------------
-        | MESSAGE
-        |--------------------------------------------------------------------------
-        */
-
-        if (
-            typeof data.message !==
-            'string'
-        ) {
-
-            throw new Error(
-                'INVALID_MESSAGE'
-            );
+        if (typeof data.message !== 'string') {
+            throw new Error('INVALID_MESSAGE');
         }
 
-
-        if (
-            !data.message.trim()
-        ) {
-
-            throw new Error(
-                'MESSAGE_REQUIRED'
-            );
+        if (!data.message.trim()) {
+            throw new Error('MESSAGE_REQUIRED');
         }
 
-
-        if (
-            data.message.length > 10000
-        ) {
-
-            throw new Error(
-                'INVALID_MESSAGE'
-            );
+        if (data.message.length > 10000) {
+            throw new Error('INVALID_MESSAGE');
         }
 
-
-        /*
-        |--------------------------------------------------------------------------
-        | PHOTOS
-        |--------------------------------------------------------------------------
-        */
-
-        if (
-            data.photos !== undefined &&
-            data.photos !== null &&
-            !Array.isArray(
-                data.photos
-            )
-        ) {
-
-            throw new Error(
-                'INVALID_PHOTOS'
-            );
+        if (data.photos !== undefined && data.photos !== null && !Array.isArray(data.photos)) {
+            throw new Error('INVALID_PHOTOS');
         }
 
-
-        if (
-            Array.isArray(
-                data.photos
-            ) &&
-            data.photos.length > 3
-        ) {
-
-            throw new Error(
-                'TOO_MANY_PHOTOS'
-            );
+        if (Array.isArray(data.photos) && data.photos.length > 3) {
+            throw new Error('TOO_MANY_PHOTOS');
         }
 
-
-        /*
-        |--------------------------------------------------------------------------
-        | DYNAMIC DATA
-        |--------------------------------------------------------------------------
-        */
-
-        if (
-            data.dynamicData !== undefined &&
-            data.dynamicData !== null &&
-            (
-                typeof data.dynamicData !==
-                'object' ||
-                Array.isArray(
-                    data.dynamicData
-                )
-            )
-        ) {
-
-            throw new Error(
-                'INVALID_DYNAMIC_DATA'
-            );
+        if (data.dynamicData !== undefined && data.dynamicData !== null 
+            && (typeof data.dynamicData !== 'object' || Array.isArray(data.dynamicData))) {
+            throw new Error('INVALID_DYNAMIC_DATA');
         }
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | NORMALIZED DATA
-        |--------------------------------------------------------------------------
-        */
 
         return {
-
-            template:
-                data.template.trim(),
-
-            recipientName:
-                data.recipientName.trim(),
-
-            senderName:
-                typeof data.senderName ===
-                'string'
-                    ? data.senderName.trim() ||
-                      null
-                    : null,
-
-            email:
-                data.email.trim().toLowerCase(),
-
-            title:
-                typeof data.title ===
-                'string'
-                    ? data.title.trim() || null
-                    : null,
-
-            message:
-                data.message.trim(),
-
-            expiresAt:
-                data.expiresAt || null,
-
-            dynamicData:
-                data.dynamicData || {}
-
+            template: data.template.trim(),
+            recipientName: data.recipientName.trim(),
+            senderName: typeof data.senderName === 'string' ? data.senderName.trim() || null : null,
+            email: data.email.trim().toLowerCase(),
+            title: typeof data.title === 'string' ? data.title.trim() || null : null,
+            message: data.message.trim(),
+            expiresAt: data.expiresAt || null,
+            dynamicData: data.dynamicData || {}
         };
     }
 }

@@ -85,7 +85,6 @@ class PaymentController {
         }
     }
 
-
     // SYNC TRANSACTION FROM REDIRECT
     static async syncTransaction(req, res) {
 

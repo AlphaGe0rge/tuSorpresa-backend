@@ -254,11 +254,20 @@ class PaymentService {
 
                 try {
 
-                    await EmailService .sendSurpriseCreated({
+                    const frontendUrl = process.env.FRONTEND_URL;
+                    const publicUrl = `${frontendUrl}/sorpresa/${publicToken}`;
+
+                    const qrBuffer = await QrCardService.generateCard(
+                        publicUrl,
+                        payment.surprise.template
+                    );
+
+                    await EmailService.sendSurpriseCreated({
                         email: payment.surprise.email,
-                        recipientName: payment.surprise.recipientName,
+                        senderName: payment.surprise.senderName,
                         publicToken: payment.surprise.publicToken,
-                        editToken: null
+                        editToken: null,
+                        qrBuffer
                     });
 
                 } catch (error) {

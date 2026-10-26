@@ -69,11 +69,7 @@ class EmailService {
         });
     }
 
-
-    // ============================================================
     // EMAIL VERIFICATION TEMPLATE
-    // ============================================================
-
     static buildEmailVerificationEmail({name, verificationUrl}) {
 
         return `
