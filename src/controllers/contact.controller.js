@@ -60,10 +60,9 @@ exports.createContactMessage = async (req, res) => {
         });
     }
 
-    const supportEmail = process.env.CONTACT_EMAIL;
+    const supportEmail = process.env.WORKSPACE_EMAIL;
 
-    if (!supportEmail || !process.env.BREVO_API_KEY || !process.env.EMAIL_FROM) {
-        console.error('Falta configurar el servicio de contacto.');
+    if (!supportEmail || !process.env.WORKSPACE_APP_PASSWORD) {
         return res.status(500).json({
             message: 'El servicio de contacto no está configurado.'
         });

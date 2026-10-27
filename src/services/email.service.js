@@ -1,4 +1,5 @@
 const axios = require('axios');
+const nodemailer = require('nodemailer');
 
 class EmailService {
 
@@ -68,6 +69,60 @@ class EmailService {
                 verificationUrl
             })
         });
+    }
+
+    static async sendWorkspaceEmail({to, subject, html, replyTo}) {
+
+        const user = process.env.WORKSPACE_EMAIL;
+        const password = process.env.WORKSPACE_APP_PASSWORD;
+
+        if (!user || !password) {
+            throw new Error('WORKSPACE_EMAIL_NOT_CONFIGURED');
+        }
+
+        const transporter = nodemailer.createTransport({
+            host: 'smtp.gmail.com',
+            port: 465,
+            secure: true,
+            auth: {
+                user,
+                pass: password
+            },
+            connectionTimeout: 15000,
+            greetingTimeout: 15000,
+            socketTimeout: 30000
+        });
+
+        try {
+
+            const startedAt = Date.now();
+
+            const result = await transporter.sendMail({
+                from: {
+                    name: 'Soporte TuSorpresaDigital',
+                    address: user
+                },
+                to,
+                subject,
+                html,
+                ...(replyTo ? { replyTo } : {})
+            });
+
+            console.log(
+                `Correo de contacto enviado en ${Date.now() - startedAt} ms`
+            );
+
+            return result;
+            
+        } catch (error) {
+            console.error('Google Workspace email error:', {
+                code: error.code,
+                responseCode: error.responseCode,
+                message: error.message
+            });
+
+            throw new Error('WORKSPACE_EMAIL_SEND_FAILED');
+        }
     }
 
     // EMAIL VERIFICATION TEMPLATE
@@ -494,9 +549,8 @@ class EmailService {
                                   .replace(/'/g, '&#039;');
     }
 
-    
     static async sendContactMessage({to, name, email, reason, orderReference, subject, message}) {
-        
+
         const reasonLabels = {
             purchase: 'Compra o pago',
             experience: 'Mi experiencia digital',
@@ -547,15 +601,16 @@ class EmailService {
             </html>
         `;
 
-        return this.sendEmail({
-            email: to,
+        return this.sendWorkspaceEmail({
+            to,
             subject: `[Contacto TuSorpresaDigital] ${subject || reasonLabels[reason] || 'Consulta'}`,
             html,
             replyTo: {
-                email,
+                address: email,
                 name
             }
         });
+
     }
 
 }
