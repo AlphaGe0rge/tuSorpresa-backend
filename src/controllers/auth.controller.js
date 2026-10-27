@@ -122,6 +122,25 @@ class AuthController {
         }
     }
 
+    async resendVerificationEmail(req, res) {
+        
+        try {
+            const result = await AuthService.resendVerificationEmail(
+                req.user.id
+            );
+
+            return res.status(200).json(result);
+        } catch (error) {
+            console.error('Error reenviando correo de verificación:', error);
+
+            return res.status(error.statusCode || 500).json({
+                message: error.statusCode
+                    ? error.message
+                    : 'No fue posible enviar el correo de verificación.'
+            });
+        }
+    }
+
     async verifyEmail(req, res) {
 
         try {

@@ -6,7 +6,6 @@ const {OAuth2Client} = require('google-auth-library');
 const {User, Surprise} = require('../models');
 
 const {Op} = require('sequelize');
-
 const EmailService = require('./email.service');
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -46,28 +45,9 @@ class AuthService {
 
         const token = this.generateToken(user);
 
-        const verificationToken = this.generateEmailVerificationToken(user);
-
-        let verificationEmailSent = false;
-
-        try {
-
-            await EmailService.sendEmailVerification({
-                email: user.email,
-                name: user.name,
-                verificationToken
-            });
-
-            verificationEmailSent = true;
-
-        } catch (error) {
-            console.error('Error enviando correo de verificación:', error);
-        }
-
         return {
             user: this.toSafeUser(user),
-            token,
-            verificationEmailSent
+            token
         };
     }
 
@@ -292,6 +272,41 @@ class AuthService {
         {
             expiresIn: process.env.EMAIL_VERIFICATION_EXPIRES_IN ||'24h'
         });
+    }
+
+    async resendVerificationEmail(userId) {
+
+        const user = await User.findByPk(userId);
+
+        if (!user) {
+            const error = new Error('Usuario no encontrado.');
+            error.statusCode = 404;
+            throw error;
+        }
+
+        if (user.status !== 'ACTIVE') {
+            const error = new Error('El usuario se encuentra deshabilitado.');
+            error.statusCode = 403;
+            throw error;
+        }
+
+        if (user.emailVerified) {
+            const error = new Error('Tu correo electrónico ya está verificado.');
+            error.statusCode = 409;
+            throw error;
+        }
+
+        const verificationToken = this.generateEmailVerificationToken(user);
+
+        await EmailService.sendEmailVerificationWorkspace({
+            email: user.email,
+            name: user.name,
+            verificationToken
+        });
+
+        return {
+            message: 'Te enviamos un correo para verificar tu cuenta.'
+        };
     }
 
     async verifyEmail(token) {

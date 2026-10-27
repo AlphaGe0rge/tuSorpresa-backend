@@ -71,6 +71,23 @@ class EmailService {
         });
     }
 
+    static async sendEmailVerificationWorkspace({email, name,verificationToken}) {
+
+        const frontendUrl = process.env.FRONTEND_URL;
+
+        const verificationUrl = `${frontendUrl}/verify-email?token=${encodeURIComponent(verificationToken)}`;
+
+        return this.sendWorkspaceEmail({
+            to: email,
+            subject: '💌 Verifica tu correo en TuSorpresa',
+            html: this.buildEmailVerificationEmail({
+                name,
+                verificationUrl
+            })
+        });
+    }
+
+
     static async sendWorkspaceEmail({to, subject, html, replyTo}) {
 
         const user = process.env.WORKSPACE_EMAIL;
@@ -99,7 +116,7 @@ class EmailService {
 
             const result = await transporter.sendMail({
                 from: {
-                    name: 'Soporte TuSorpresaDigital',
+                    name: 'TuSorpresaDigital',
                     address: user
                 },
                 to,
@@ -108,9 +125,7 @@ class EmailService {
                 ...(replyTo ? { replyTo } : {})
             });
 
-            console.log(
-                `Correo de contacto enviado en ${Date.now() - startedAt} ms`
-            );
+            console.log(`Correo de contacto enviado en ${Date.now() - startedAt} ms`);
 
             return result;
             
@@ -196,7 +211,7 @@ class EmailService {
                                 color:#c73562;
                             "
                         >
-                            ¡Bienvenido a TuSorpresa!
+                            ¡Bienvenido a TuSorpresaDigital!
                         </h1>
 
 
@@ -238,19 +253,22 @@ class EmailService {
                         >
 
                             <a
-                                href="${verificationUrl}"
+                                href="${this.escapeHtml(verificationUrl)}"
+                                target="_blank"
                                 style="
                                     display:inline-block;
                                     padding:15px 28px;
-                                    background:#d94670;
+                                    background-color:#d94670;
                                     color:#ffffff;
                                     text-decoration:none;
                                     border-radius:12px;
                                     font-size:16px;
                                     font-weight:bold;
+                                    line-height:1.5;
+                                    mso-padding-alt:0;
                                 "
                             >
-                                💖 Verificar mi correo
+                                Verificar mi correo
                             </a>
 
                         </div>
@@ -305,11 +323,13 @@ class EmailService {
                             </p>
 
                             <a
-                                href="${verificationUrl}"
+                                href="${this.escapeHtml(verificationUrl)}"
+                                target="_blank"
                                 style="
                                     font-size:12px;
                                     color:#a52d50;
-                                    text-decoration:none;
+                                    text-decoration:underline;
+                                    overflow-wrap:anywhere;
                                 "
                             >
                                 ${this.escapeHtml(verificationUrl)}
