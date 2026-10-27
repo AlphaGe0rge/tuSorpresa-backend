@@ -4,6 +4,8 @@ const {Payment, Surprise} = require('../models');
 
 const WompiService = require('./wompi.service');
 const EmailService = require('./email.service');
+const QrCardService = require('./qr-card.service');
+const SurpriseService = require('./surprise.service');
 
 class PaymentService {
 
@@ -87,18 +89,32 @@ class PaymentService {
 
     static async authorizeSurpriseAccess({surprise, userId = null, editToken = null}) {
 
-        if (userId) {
+        if (!surprise) {
+            throw new Error('SURPRISE_NOT_FOUND');
+        }
 
-            if (surprise.userId !== userId) throw new Error('SURPRISE_NOT_FOUND');
+        if (userId) {
+            if (surprise.userId !== userId) {
+                throw new Error('SURPRISE_NOT_FOUND');
+            }
 
             return true;
         }
 
-        if (!editToken) throw new Error('PAYMENT_AUTH_REQUIRED');
+        if (!editToken) {
+            throw new Error('PAYMENT_AUTH_REQUIRED');
+        }
 
-        const validToken = await Surprise.verifyEditToken(editToken, surprise.editTokenHash);
+        const editTokenHash = SurpriseService.hashEditToken(editToken);
 
-        if (!validToken) throw new Error('PAYMENT_AUTH_REQUIRED'); 
+        const validToken = crypto.timingSafeEqual(
+            Buffer.from(editTokenHash, 'hex'),
+            Buffer.from(surprise.editTokenHash, 'hex')
+        );
+
+        if (!validToken) {
+            throw new Error('PAYMENT_AUTH_REQUIRED');
+        }
 
         return true;
     }
@@ -140,8 +156,7 @@ class PaymentService {
         
         const payment = await Payment.findOne({
             where: {
-                reference:
-                    transaction.reference
+                reference: transaction.reference
             },
             include: [
                 {
@@ -197,8 +212,7 @@ class PaymentService {
         
         const payment = await Payment.findOne({
             where: {
-                reference:
-                    transaction.reference
+                reference: transaction.reference
             },
             include: [
                 {
@@ -255,7 +269,7 @@ class PaymentService {
                 try {
 
                     const frontendUrl = process.env.FRONTEND_URL;
-                    const publicUrl = `${frontendUrl}/sorpresa/${publicToken}`;
+                    const publicUrl = `${frontendUrl}/sorpresa/${payment.surprise.publicToken}`;
 
                     const qrBuffer = await QrCardService.generateCard(
                         publicUrl,

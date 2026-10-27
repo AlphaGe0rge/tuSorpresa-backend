@@ -49,6 +49,16 @@ const User = sequelize.define('User', {
         allowNull: true,
         field: 'last_login_at'
     },
+    passwordResetTokenHash: {
+        type: DataTypes.STRING(64),
+        allowNull: true,
+        field: 'password_reset_token_hash'
+    },
+    passwordResetExpiresAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'password_reset_expires_at'
+    },
     createdAt: {
         type: DataTypes.DATE,
         allowNull: false,

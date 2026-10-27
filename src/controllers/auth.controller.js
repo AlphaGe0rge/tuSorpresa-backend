@@ -123,7 +123,7 @@ class AuthController {
     }
 
     async resendVerificationEmail(req, res) {
-        
+
         try {
             const result = await AuthService.resendVerificationEmail(
                 req.user.id
@@ -170,6 +170,53 @@ class AuthController {
             });
         }
     }
+
+    async forgotPassword(req, res) {
+
+        try {
+            const {email} = req.body;
+
+            if (!email || typeof email !== 'string' || !email.trim()) {
+                return res.status(400).json({
+                    message: 'El correo electrónico es obligatorio.'
+                });
+            }
+
+            const result = await AuthService.requestPasswordReset(email);
+
+            return res.status(200).json(result);
+        } catch (error) {
+            console.error('Error en forgot-password:', error);
+
+            return res.status(500).json({
+                message: 'No fue posible procesar la solicitud. Inténtalo más tarde.'
+            });
+        }
+    }
+
+    async resetPassword(req, res) {
+
+        try {
+            
+            const {token, password} = req.body;
+
+            const result = await AuthService.resetPassword({
+                token,
+                password
+            });
+
+            return res.status(200).json(result);
+        } catch (error) {
+            console.error('Error en reset-password:', error);
+
+            return res.status(error.statusCode || 500).json({
+                message: error.statusCode
+                    ? error.message
+                    : 'No fue posible restablecer la contraseña. Inténtalo más tarde.'
+            });
+        }
+    }
+
 }
 
 module.exports = new AuthController();

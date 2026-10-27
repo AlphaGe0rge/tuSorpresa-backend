@@ -8,6 +8,8 @@ const {User, Surprise} = require('../models');
 const {Op} = require('sequelize');
 const EmailService = require('./email.service');
 
+const crypto = require('crypto');
+
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 class AuthService {
@@ -51,9 +53,21 @@ class AuthService {
         };
     }
 
+    
     async login({email, password}) {
 
         const normalizedEmail = email.trim().toLowerCase();
+
+        const genericError = () => {
+
+            const error = new Error(
+                'No pudimos iniciar sesión con esos datos. Verifica tu correo y contraseña, o intenta continuar con Google si registraste tu cuenta de esa manera.'
+            );
+
+            error.statusCode = 401;
+
+            return error;
+        };
 
         const user = await User.findOne({
             where: {
@@ -62,41 +76,24 @@ class AuthService {
         });
 
         if (!user) {
-
-            const error = new Error('Correo o contraseña incorrectos.');
-
-            error.statusCode = 401;
-
-            throw error;
+            throw genericError();
         }
 
         if (user.status !== 'ACTIVE') {
-
-            const error = new Error('El usuario se encuentra deshabilitado.');
-
-            error.statusCode = 403;
-
-            throw error;
+            throw genericError();
         }
 
         if (!user.passwordHash) {
-
-            const error = new Error('Esta cuenta utiliza Google para iniciar sesión.');
-
-            error.statusCode = 400;
-
-            throw error;
+            throw genericError();
         }
 
-        const validPassword = await bcrypt.compare(password, user.passwordHash);
+        const validPassword = await bcrypt.compare(
+            password,
+            user.passwordHash
+        );
 
         if (!validPassword) {
-
-            const error = new Error('Correo o contraseña incorrectos.');
-
-            error.statusCode = 401;
-
-            throw error;
+            throw genericError();
         }
 
         user.lastLoginAt = new Date();
@@ -406,6 +403,99 @@ class AuthService {
             createdAt: user.createdAt
         };
     }
+
+    async requestPasswordReset(email) {
+
+        const normalizedEmail = email.trim().toLowerCase();
+
+        const genericResponse = {
+            message: 'Si existe una cuenta asociada a este correo, recibirás instrucciones para restablecer tu contraseña.'
+        };
+
+        const user = await User.findOne({
+            where: {
+                email: normalizedEmail,
+                status: 'ACTIVE'
+            }
+        });
+
+        if (!user || !user.passwordHash) return genericResponse;
+
+        const resetToken = crypto.randomBytes(32).toString('hex');
+
+        const resetTokenHash = crypto
+            .createHash('sha256')
+            .update(resetToken)
+            .digest('hex');
+
+        user.passwordResetTokenHash = resetTokenHash;
+        user.passwordResetExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+        await user.save();
+
+        try {
+            await EmailService.sendPasswordResetEmail({
+                email: user.email,
+                name: user.name,
+                resetToken
+            });
+        } catch (error) {
+            user.passwordResetTokenHash = null;
+            user.passwordResetExpiresAt = null;
+
+            await user.save();
+
+            throw error;
+        }
+
+        return genericResponse;
+    }
+
+    async resetPassword({token, password}) {
+
+        if (!token || !password) {
+            const error = new Error('El token y la nueva contraseña son obligatorios.');
+            error.statusCode = 400;
+            throw error;
+        }
+
+        if (password.length < 8) {
+            const error = new Error('La contraseña debe tener al menos 8 caracteres.');
+            error.statusCode = 400;
+            throw error;
+        }
+
+        const tokenHash = crypto.createHash('sha256')
+                                .update(token)
+                                .digest('hex');
+
+        const user = await User.findOne({
+            where: {
+                passwordResetTokenHash: tokenHash,
+                passwordResetExpiresAt: {
+                    [Op.gt]: new Date()
+                },
+                status: 'ACTIVE'
+            }
+        });
+
+        if (!user) {
+            const error = new Error('El enlace de recuperación no es válido o ha expirado.');
+            error.statusCode = 400;
+            throw error;
+        }
+
+        user.passwordHash = await bcrypt.hash(password, 12);
+        user.passwordResetTokenHash = null;
+        user.passwordResetExpiresAt = null;
+
+        await user.save();
+
+        return {
+            message: 'Tu contraseña se ha actualizado correctamente.'
+        };
+    }
+
 }
 
 module.exports = new AuthService();

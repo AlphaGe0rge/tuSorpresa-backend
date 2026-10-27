@@ -633,6 +633,74 @@ class EmailService {
 
     }
 
+    static async sendPasswordResetEmail({email, name, resetToken}) {
+        
+        const frontendUrl = process.env.FRONTEND_URL;
+
+        if (!frontendUrl) {
+            throw new Error('FRONTEND_URL_NOT_CONFIGURED');
+        }
+
+        const resetUrl = `${frontendUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
+
+        const safeName = this.escapeHtml(name);
+        const safeUrl = this.escapeHtml(resetUrl);
+
+        const html = `
+            <!DOCTYPE html>
+            <html lang="es">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Restablece tu contraseña</title>
+            </head>
+            <body style="margin:0;padding:24px;background:#fff4f7;font-family:Arial,sans-serif;color:#302128;">
+                <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #f0dfe5;border-radius:20px;padding:36px 24px;text-align:center;">
+                    <div style="font-size:42px;">🔐</div>
+
+                    <h1 style="color:#c73562;">Restablece tu contraseña</h1>
+
+                    <p style="font-size:16px;line-height:1.7;color:#6b5961;">
+                        Hola, <strong>${safeName}</strong>.
+                    </p>
+
+                    <p style="font-size:16px;line-height:1.7;color:#6b5961;">
+                        Recibimos una solicitud para cambiar la contraseña
+                        de tu cuenta de TuSorpresaDigital.
+                    </p>
+
+                    <div style="margin:28px 0;">
+                        <a href="${safeUrl}"
+                        style="display:inline-block;padding:15px 28px;background:#d94670;color:#ffffff;text-decoration:none;border-radius:12px;font-weight:bold;">
+                            Crear nueva contraseña
+                        </a>
+                    </div>
+
+                    <p style="font-size:13px;line-height:1.7;color:#8c7b82;">
+                        Este enlace vence en 15 minutos y solo puede utilizarse una vez.
+                        Si no solicitaste el cambio, ignora este mensaje.
+                    </p>
+
+                    <div style="margin-top:24px;padding:15px;background:#fff7f9;border-radius:12px;overflow-wrap:anywhere;">
+                        <p style="font-size:12px;color:#8c7b82;">
+                            Si el botón no funciona, copia este enlace en tu navegador:
+                        </p>
+                        <a href="${safeUrl}" style="font-size:12px;color:#a52d50;">
+                            ${safeUrl}
+                        </a>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `;
+
+        return this.sendWorkspaceEmail({
+            to: email,
+            subject: '🔐 Restablece tu contraseña | TuSorpresaDigital',
+            html
+        });
+    }
+
 }
 
 
