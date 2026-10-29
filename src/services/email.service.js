@@ -701,6 +701,65 @@ class EmailService {
         });
     }
 
+    static async sendEmailChangeVerificationWorkspace({email, name, token}) {
+
+        const frontendUrl = process.env.FRONTEND_URL;
+
+        if (!frontendUrl) {
+            throw new Error('FRONTEND_URL no está configurada.');
+        }
+
+        const verificationUrl =
+            `${frontendUrl.replace(/\/$/, '')}/verify-email-change` +
+            `?token=${encodeURIComponent(token)}`;
+
+        const safeName = this.escapeHtml ? this.escapeHtml(name) : name;
+
+        const safeUrl = verificationUrl.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+
+        const html = `
+            <div style="max-width:600px;margin:0 auto;padding:36px 24px;
+                        font-family:Arial,sans-serif;color:#302128;
+                        background:#ffffff;text-align:center;">
+                <h1 style="color:#c73562;">Confirma tu nuevo correo</h1>
+
+                <p>Hola, ${safeName}.</p>
+
+                <p>
+                    Recibimos una solicitud para cambiar el correo electrónico
+                    de tu cuenta de TuSorpresaDigital.
+                </p>
+
+                <p>
+                    Si solicitaste este cambio, confirma la nueva dirección
+                    utilizando el siguiente botón.
+                </p>
+
+                <a href="${safeUrl}"
+                style="display:inline-block;margin:20px 0;padding:16px 28px;
+                        background:#d94670;color:#ffffff;text-decoration:none;
+                        border-radius:10px;font-weight:bold;">
+                    Confirmar nuevo correo
+                </a>
+
+                <p>
+                    Este enlace vence en 30 minutos.
+                </p>
+
+                <p style="font-size:12px;color:#806b74;">
+                    Si no solicitaste este cambio, ignora este mensaje.
+                    Tu correo actual seguirá asociado a tu cuenta.
+                </p>
+            </div>
+        `;
+
+        return this.sendWorkspaceEmail({
+            to: email,
+            subject: 'Confirma tu nuevo correo - TuSorpresaDigital',
+            html
+        });
+    }
+
 }
 
 

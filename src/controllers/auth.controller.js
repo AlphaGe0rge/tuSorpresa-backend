@@ -217,6 +217,131 @@ class AuthController {
         }
     }
 
+    async updateProfile(req, res) {
+
+        try {
+
+            const {name} = req.body;
+
+            if (typeof name !== 'string' || !name.trim()) {
+                return res.status(400).json({
+                    message: 'El nombre es obligatorio.'
+                });
+            }
+
+            if (name.trim().length > 100) {
+                return res.status(400).json({
+                    message: 'El nombre no puede superar los 100 caracteres.'
+                });
+            }
+
+            const user = await AuthService.updateProfile(req.user.id, {name});
+
+            return res.status(200).json({
+                message: 'Tu perfil se actualizó correctamente.',
+                user
+            });
+
+        } catch (error) {
+
+            console.error('Error en updateProfile:', error);
+
+            return res.status(error.statusCode || 500).json({
+                message: error.statusCode ? error.message : 'No fue posible actualizar tu perfil.'
+            });
+        }
+    }
+
+    async changePassword(req, res) {
+
+        try {
+
+            const {currentPassword, newPassword} = req.body;
+
+            if (!currentPassword || !newPassword) {
+                return res.status(400).json({
+                    message: 'Debes ingresar tu contraseña actual y la nueva.'
+                });
+            }
+
+            if (typeof newPassword !== 'string' || newPassword.length < 8) {
+                return res.status(400).json({
+                    message: 'La nueva contraseña debe tener al menos 8 caracteres.'
+                });
+            }
+
+            const result = await AuthService.changePassword(
+                req.user.id,
+                {currentPassword, newPassword}
+            );
+
+            return res.status(200).json(result);
+
+        } catch (error) {
+            console.error('Error en changePassword:', error);
+
+            return res.status(error.statusCode || 500).json({
+                message: error.statusCode
+                    ? error.message
+                    : 'No fue posible cambiar la contraseña.'
+            });
+        }
+    }
+
+    async requestEmailChange(req, res) {
+        try {
+            const {email} = req.body;
+
+            if (typeof email !== 'string' || !email.trim()) {
+                return res.status(400).json({
+                    message: 'Debes ingresar el nuevo correo electrónico.'
+                });
+            }
+
+            const result = await AuthService.requestEmailChange(
+                req.user.id,
+                email
+            );
+
+            return res.status(200).json(result);
+        } catch (error) {
+            console.error('Error en requestEmailChange:', error);
+
+            return res.status(error.statusCode || 500).json({
+                message: error.statusCode
+                    ? error.message
+                    : 'No fue posible solicitar el cambio de correo.'
+            });
+        }
+    }
+
+    async verifyEmailChange(req, res) {
+        
+        try {
+
+            const {token} = req.body;
+
+            if (!token || typeof token !== 'string') {
+                return res.status(400).json({
+                    message: 'El token de confirmación es obligatorio.'
+                });
+            }
+
+            const result = await AuthService.verifyEmailChange(token);
+
+            return res.status(200).json(result);
+            
+        } catch (error) {
+            console.error('Error en verifyEmailChange:', error);
+
+            return res.status(error.statusCode || 500).json({
+                message: error.statusCode
+                    ? error.message
+                    : 'No fue posible confirmar el cambio de correo.'
+            });
+        }
+    }
+
 }
 
 module.exports = new AuthController();

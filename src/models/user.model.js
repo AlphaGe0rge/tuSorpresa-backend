@@ -59,6 +59,18 @@ const User = sequelize.define('User', {
         allowNull: true,
         field: 'password_reset_expires_at'
     },
+    pendingEmail: {
+        type: DataTypes.STRING(254),
+        allowNull: true
+    },
+    emailChangeTokenHash: {
+        type: DataTypes.STRING(64),
+        allowNull: true
+    },
+    emailChangeExpiresAt: {
+        type: DataTypes.DATE,
+        allowNull: true
+    },
     createdAt: {
         type: DataTypes.DATE,
         allowNull: false,

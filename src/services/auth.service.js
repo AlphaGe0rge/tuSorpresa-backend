@@ -391,12 +391,12 @@ class AuthService {
     }
 
     toSafeUser(user) {
-
         return {
             id: user.id,
             name: user.name,
             email: user.email,
             emailVerified: user.emailVerified,
+            authProvider: user.googleId ? 'GOOGLE' : 'LOCAL',
             roles: user.roles,
             status: user.status,
             lastLoginAt: user.lastLoginAt,
@@ -493,6 +493,243 @@ class AuthService {
 
         return {
             message: 'Tu contraseña se ha actualizado correctamente.'
+        };
+    }
+
+    async updateProfile(userId, {name}) {
+
+        const user = await User.findByPk(userId);
+
+        if (!user) {
+            const error = new Error('Usuario no encontrado.');
+            error.statusCode = 404;
+            throw error;
+        }
+
+        if (user.status !== 'ACTIVE') {
+            const error = new Error('El usuario se encuentra deshabilitado.');
+            error.statusCode = 403;
+            throw error;
+        }
+
+        user.name = name.trim();
+
+        await user.save();
+
+        return this.toSafeUser(user);
+    }
+
+    async changePassword(userId, {currentPassword, newPassword}) {
+
+        const user = await User.findByPk(userId);
+
+        if (!user) {
+            const error = new Error('Usuario no encontrado.');
+            error.statusCode = 404;
+            throw error;
+        }
+
+        if (user.status !== 'ACTIVE') {
+            const error = new Error('El usuario se encuentra deshabilitado.');
+            error.statusCode = 403;
+            throw error;
+        }
+
+        if (!user.passwordHash) {
+            const error = new Error('Esta cuenta utiliza Google para iniciar sesión y no tiene una contraseña local.');
+            error.statusCode = 400;
+            throw error;
+        }
+
+        const validPassword = await bcrypt.compare(
+            currentPassword,
+            user.passwordHash
+        );
+
+        if (!validPassword) {
+            const error = new Error('La contraseña actual es incorrecta.');
+            error.statusCode = 400;
+            throw error;
+        }
+
+        const samePassword = await bcrypt.compare(
+            newPassword,
+            user.passwordHash
+        );
+
+        if (samePassword) {
+            const error = new Error('La nueva contraseña debe ser diferente de la actual.');
+            error.statusCode = 400;
+            throw error;
+        }
+
+        user.passwordHash = await bcrypt.hash(newPassword, 12);
+
+        user.passwordResetTokenHash = null;
+        user.passwordResetExpiresAt = null;
+
+        await user.save();
+
+        return {message: 'Tu contraseña se cambió correctamente.'};
+
+    }
+
+    async requestEmailChange(userId, email) {
+
+        const user = await User.findByPk(userId);
+
+        if (!user) {
+            const error = new Error('Usuario no encontrado.');
+            error.statusCode = 404;
+            throw error;
+        }
+
+        if (user.status !== 'ACTIVE') {
+            const error = new Error('El usuario se encuentra deshabilitado.');
+            error.statusCode = 403;
+            throw error;
+        }
+
+        if (!user.passwordHash) {
+            const error = new Error('Las cuentas de Google no pueden cambiar su correo desde esta opción.');
+            error.statusCode = 400;
+            throw error;
+        }
+
+        const normalizedEmail = email.trim().toLowerCase();
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+        if (!emailRegex.test(normalizedEmail) || normalizedEmail.length > 254) {
+            const error = new Error('El correo electrónico no es válido.');
+            error.statusCode = 400;
+            throw error;
+        }
+
+        if (normalizedEmail === user.email.toLowerCase()) {
+            const error = new Error('El nuevo correo debe ser diferente del actual.');
+            error.statusCode = 400;
+            throw error;
+        }
+
+        const existingUser = await User.findOne({
+            where: {
+                email: normalizedEmail
+            }
+        });
+
+        if (existingUser) {
+            const error = new Error('No es posible utilizar ese correo electrónico.');
+            error.statusCode = 409;
+            throw error;
+        }
+
+        const pendingEmailUser = await User.findOne({
+            where: {
+                pendingEmail: normalizedEmail,
+                id: {[Op.ne]: user.id}
+            }
+        });
+
+        if (pendingEmailUser) {
+            const error = new Error('No es posible utilizar ese correo electrónico.');
+            error.statusCode = 409;
+            throw error;
+        }
+
+        const token = crypto.randomBytes(32).toString('hex');
+
+        const tokenHash = crypto.createHash('sha256')
+                                .update(token)
+                                .digest('hex');
+
+        user.pendingEmail = normalizedEmail;
+        user.emailChangeTokenHash = tokenHash;
+        user.emailChangeExpiresAt = new Date(Date.now() + 30 * 60 * 1000);
+
+        await user.save();
+
+        try {
+            
+            await EmailService.sendEmailChangeVerificationWorkspace({
+                email: normalizedEmail,
+                name: user.name,
+                token
+            });
+
+        } catch (error) {
+            user.pendingEmail = null;
+            user.emailChangeTokenHash = null;
+            user.emailChangeExpiresAt = null;
+
+            await user.save();
+
+            throw error;
+        }
+
+        return {message: 'Te enviamos un enlace al nuevo correo. Confírmalo para completar el cambio.'};
+
+    }
+
+    async verifyEmailChange(token) {
+
+        if (!token || typeof token !== 'string') {
+            const error = new Error('El token de confirmación es obligatorio.');
+            error.statusCode = 400;
+            throw error;
+        }
+
+        const tokenHash = crypto
+            .createHash('sha256')
+            .update(token)
+            .digest('hex');
+
+        const user = await User.findOne({
+            where: {
+                emailChangeTokenHash: tokenHash,
+                emailChangeExpiresAt: {
+                    [Op.gt]: new Date()
+                },
+                status: 'ACTIVE'
+            }
+        });
+
+        if (!user || !user.pendingEmail) {
+            const error = new Error(
+                'El enlace de cambio de correo no es válido o ha expirado.'
+            );
+
+            error.statusCode = 400;
+            throw error;
+        }
+
+        const existingUser = await User.findOne({
+            where: {
+                email: user.pendingEmail,
+                id: {[Op.ne]: user.id}
+            }
+        });
+
+        if (existingUser) {
+            const error = new Error(
+                'No es posible utilizar ese correo electrónico.'
+            );
+
+            error.statusCode = 409;
+            throw error;
+        }
+
+        user.email = user.pendingEmail;
+        user.pendingEmail = null;
+        user.emailChangeTokenHash = null;
+        user.emailChangeExpiresAt = null;
+        user.emailVerified = true;
+
+        await user.save();
+
+        return {
+            message: 'Tu correo electrónico se actualizó correctamente.',
+            user: this.toSafeUser(user)
         };
     }
 
