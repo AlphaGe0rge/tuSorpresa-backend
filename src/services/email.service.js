@@ -713,7 +713,7 @@ class EmailService {
             `${frontendUrl.replace(/\/$/, '')}/verify-email-change` +
             `?token=${encodeURIComponent(token)}`;
 
-        const safeName = this.escapeHtml ? this.escapeHtml(name) : name;
+        const safeName = this.escapeHtml(name);
 
         const safeUrl = verificationUrl.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 
@@ -744,6 +744,7 @@ class EmailService {
 
                 <p>
                     Este enlace vence en 30 minutos.
+                    ${safeUrl}
                 </p>
 
                 <p style="font-size:12px;color:#806b74;">

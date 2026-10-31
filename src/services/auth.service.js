@@ -9,6 +9,7 @@ const {Op} = require('sequelize');
 const EmailService = require('./email.service');
 
 const crypto = require('crypto');
+const sequelize = require('../config/database');
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -576,28 +577,7 @@ class AuthService {
 
     async requestEmailChange(userId, email) {
 
-        const user = await User.findByPk(userId);
-
-        if (!user) {
-            const error = new Error('Usuario no encontrado.');
-            error.statusCode = 404;
-            throw error;
-        }
-
-        if (user.status !== 'ACTIVE') {
-            const error = new Error('El usuario se encuentra deshabilitado.');
-            error.statusCode = 403;
-            throw error;
-        }
-
-        if (!user.passwordHash) {
-            const error = new Error('Las cuentas de Google no pueden cambiar su correo desde esta opción.');
-            error.statusCode = 400;
-            throw error;
-        }
-
         const normalizedEmail = email.trim().toLowerCase();
-
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
         if (!emailRegex.test(normalizedEmail) || normalizedEmail.length > 254) {
@@ -606,36 +586,11 @@ class AuthService {
             throw error;
         }
 
-        if (normalizedEmail === user.email.toLowerCase()) {
-            const error = new Error('El nuevo correo debe ser diferente del actual.');
-            error.statusCode = 400;
-            throw error;
-        }
+        const now = new Date();
 
-        const existingUser = await User.findOne({
-            where: {
-                email: normalizedEmail
-            }
-        });
-
-        if (existingUser) {
-            const error = new Error('No es posible utilizar ese correo electrónico.');
-            error.statusCode = 409;
-            throw error;
-        }
-
-        const pendingEmailUser = await User.findOne({
-            where: {
-                pendingEmail: normalizedEmail,
-                id: {[Op.ne]: user.id}
-            }
-        });
-
-        if (pendingEmailUser) {
-            const error = new Error('No es posible utilizar ese correo electrónico.');
-            error.statusCode = 409;
-            throw error;
-        }
+        const COOLDOWN_MS = 2 * 60 * 1000;
+        const WINDOW_MS = 24 * 60 * 60 * 1000;
+        const MAX_REQUESTS = 3;
 
         const token = crypto.randomBytes(32).toString('hex');
 
@@ -643,14 +598,137 @@ class AuthService {
                                 .update(token)
                                 .digest('hex');
 
-        user.pendingEmail = normalizedEmail;
-        user.emailChangeTokenHash = tokenHash;
-        user.emailChangeExpiresAt = new Date(Date.now() + 30 * 60 * 1000);
-
-        await user.save();
+        let user;
+        let previousEmail;
 
         try {
-            
+
+            await sequelize.transaction(async transaction => {
+
+                user = await User.findByPk(userId, {
+                    transaction,
+                    lock: transaction.LOCK.UPDATE
+                });
+
+                if (!user) {
+                    const error = new Error('Usuario no encontrado.');
+                    error.statusCode = 404;
+                    throw error;
+                }
+
+                if (user.status !== 'ACTIVE') {
+                    const error = new Error('El usuario se encuentra deshabilitado.');
+                    error.statusCode = 403;
+                    throw error;
+                }
+
+                if (!user.passwordHash) {
+                    const error = new Error(
+                        'Las cuentas de Google no pueden cambiar su correo desde esta opción.'
+                    );
+                    error.statusCode = 400;
+                    throw error;
+                }
+
+                if (normalizedEmail === user.email.toLowerCase()) {
+                    const error = new Error('El nuevo correo debe ser diferente del actual.');
+                    error.statusCode = 400;
+                    throw error;
+                }
+
+                const existingUser = await User.findOne({
+                    where: {
+                        email: normalizedEmail
+                    },
+                    transaction
+                });
+
+                if (existingUser) {
+                    const error = new Error('No es posible utilizar ese correo electrónico.');
+                    error.statusCode = 409;
+                    throw error;
+                }
+
+                const pendingEmailUser = await User.findOne({
+                    where: {
+                        pendingEmail: normalizedEmail,
+                        id: { [Op.ne]: user.id }
+                    },
+                    transaction
+                });
+
+                if (pendingEmailUser) {
+                    const error = new Error('No es posible utilizar ese correo electrónico.');
+                    error.statusCode = 409;
+                    throw error;
+                }
+
+                // Control del intervalo de 24 horas.
+                let requestCount = user.emailChangeRequestCount || 0;
+
+                let windowStartedAt = user.emailChangeWindowStartedAt
+                    ? new Date(user.emailChangeWindowStartedAt)
+                    : null;
+
+                if (!windowStartedAt || now.getTime() - windowStartedAt.getTime() >= WINDOW_MS) {
+                    requestCount = 0;
+                    windowStartedAt = now;
+                }
+
+                // Control de espera entre solicitudes.
+                if (user.emailChangeLastRequestedAt) {
+
+                    const lastRequestedAt = new Date(user.emailChangeLastRequestedAt);
+
+                    const elapsed = now.getTime() - lastRequestedAt.getTime();
+
+                    if (elapsed < COOLDOWN_MS) {
+
+                        const remainingSeconds = Math.ceil((COOLDOWN_MS - elapsed) / 1000);
+
+                        const error = new Error(`Debes esperar ${remainingSeconds} segundos antes de solicitar otro cambio.`);
+
+                        error.statusCode = 429;
+                        throw error;
+                    }
+                }
+
+                if (requestCount >= MAX_REQUESTS) {
+
+                    const error = new Error(
+                        'Has alcanzado el límite de solicitudes de cambio de correo. Inténtalo nuevamente después de 24 horas.'
+                    );
+
+                    error.statusCode = 429;
+                    throw error;
+                }
+
+                previousEmail = user.email;
+
+                user.emailChangeRequestCount = requestCount + 1;
+                user.emailChangeWindowStartedAt = windowStartedAt;
+                user.emailChangeLastRequestedAt = now;
+                user.pendingEmail = normalizedEmail;
+                user.emailChangeTokenHash = tokenHash;
+                user.emailChangeExpiresAt = new Date(now.getTime() + 30 * 60 * 1000);
+
+                await user.save({ transaction });
+
+            });
+
+        } catch (error) {
+
+            if (error.name === 'SequelizeUniqueConstraintError') {
+                const conflictError = new Error('No es posible utilizar ese correo electrónico.');
+                conflictError.statusCode = 409;
+                throw conflictError;
+            }
+
+            throw error;
+        }
+
+        try {
+
             await EmailService.sendEmailChangeVerificationWorkspace({
                 email: normalizedEmail,
                 name: user.name,
@@ -658,17 +736,26 @@ class AuthService {
             });
 
         } catch (error) {
-            user.pendingEmail = null;
-            user.emailChangeTokenHash = null;
-            user.emailChangeExpiresAt = null;
 
-            await user.save();
+            await User.update(
+                {
+                    pendingEmail: null,
+                    emailChangeTokenHash: null,
+                    emailChangeExpiresAt: null
+                },
+                {
+                    where: {
+                        id: user.id,
+                        emailChangeTokenHash: tokenHash
+                    }
+                });
 
             throw error;
         }
 
-        return {message: 'Te enviamos un enlace al nuevo correo. Confírmalo para completar el cambio.'};
-
+        return {
+            message: 'Te enviamos un enlace al nuevo correo. Confírmalo para completar el cambio.'
+        };
     }
 
     async verifyEmailChange(token) {
@@ -679,53 +766,80 @@ class AuthService {
             throw error;
         }
 
-        const tokenHash = crypto
-            .createHash('sha256')
-            .update(token)
-            .digest('hex');
+        const tokenHash = crypto.createHash('sha256')
+                                .update(token)
+                                .digest('hex');
 
-        const user = await User.findOne({
-            where: {
-                emailChangeTokenHash: tokenHash,
-                emailChangeExpiresAt: {
-                    [Op.gt]: new Date()
-                },
-                status: 'ACTIVE'
+        let user;
+        let previousEmail;
+
+        try {
+
+            await sequelize.transaction(async transaction => {
+
+                user = await User.findOne({
+                    where: {
+                        emailChangeTokenHash: tokenHash,
+                        emailChangeExpiresAt: {
+                            [Op.gt]: new Date()
+                        },
+                        status: 'ACTIVE'
+                    },
+                    transaction,
+                    lock: transaction.LOCK.UPDATE
+                });
+
+                if (!user || !user.pendingEmail) {
+                    const error = new Error(
+                        'El enlace de cambio de correo no es válido o ha expirado.'
+                    );
+
+                    error.statusCode = 400;
+                    throw error;
+                }
+
+                const existingUser = await User.findOne({
+                    where: {
+                        email: user.pendingEmail,
+                        id: { [Op.ne]: user.id }
+                    },
+                    transaction
+                });
+
+                if (existingUser) {
+                    const error = new Error(
+                        'No es posible utilizar ese correo electrónico.'
+                    );
+
+                    error.statusCode = 409;
+                    throw error;
+                }
+
+                previousEmail = user.email;
+
+                user.email = user.pendingEmail;
+                user.pendingEmail = null;
+                user.emailChangeTokenHash = null;
+                user.emailChangeExpiresAt = null;
+                user.emailVerified = true;
+                user.emailChangeRequestCount = 0;
+                user.emailChangeWindowStartedAt = null;
+                user.emailChangeLastRequestedAt = null;
+
+                await user.save({ transaction });
+
+            });
+
+        } catch (error) {
+
+            if (error.name === 'SequelizeUniqueConstraintError') {
+                const conflictError = new Error('No es posible utilizar ese correo electrónico.');
+                conflictError.statusCode = 409;
+                throw conflictError;
             }
-        });
 
-        if (!user || !user.pendingEmail) {
-            const error = new Error(
-                'El enlace de cambio de correo no es válido o ha expirado.'
-            );
-
-            error.statusCode = 400;
             throw error;
         }
-
-        const existingUser = await User.findOne({
-            where: {
-                email: user.pendingEmail,
-                id: {[Op.ne]: user.id}
-            }
-        });
-
-        if (existingUser) {
-            const error = new Error(
-                'No es posible utilizar ese correo electrónico.'
-            );
-
-            error.statusCode = 409;
-            throw error;
-        }
-
-        user.email = user.pendingEmail;
-        user.pendingEmail = null;
-        user.emailChangeTokenHash = null;
-        user.emailChangeExpiresAt = null;
-        user.emailVerified = true;
-
-        await user.save();
 
         return {
             message: 'Tu correo electrónico se actualizó correctamente.',
