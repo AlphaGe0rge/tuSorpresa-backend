@@ -2,6 +2,7 @@ const crypto = require('crypto');
 
 const Surprise = require('../models/surprise.model');
 const R2Service = require('./r2.service');
+const { User } = require('../models');
 
 class SurpriseService {
 
@@ -13,11 +14,22 @@ class SurpriseService {
         return crypto.createHash('sha512').update(token).digest('hex');
     }
 
-    static async create(data,userId = null) {
+    static async create(data, userId = null) {
 
         this.validateData(data);
 
         const normalizedUserId = userId || null;
+
+        let isAdmin = false;
+
+        if (normalizedUserId) {
+
+            const user = await User.findByPk(normalizedUserId, {
+                attributes: ['id', 'roles', 'status']
+            });
+
+            isAdmin = user?.status === 'ACTIVE' && user?.roles === 'ADMIN';
+        }
 
         const publicToken = this.generateToken();
         const editToken = this.generateToken();
@@ -35,14 +47,16 @@ class SurpriseService {
             dynamicData: data.dynamicData || {},
             title: data.title || null,
             message: data.message || null,
-            expiresAt: data.expiresAt || null,
-            status: 'PENDING_PAYMENT'
+            expiresAt: isAdmin ? null : (data.expiresAt || null),
+            status: isAdmin ? 'ACTIVE' : 'PENDING_PAYMENT'
         });
 
         return {
             id: surprise.id,
             publicToken,
-            editToken
+            editToken,
+            status: surprise.status,
+            requiresPayment: !isAdmin
         };
     }
 
@@ -300,7 +314,7 @@ class SurpriseService {
 
                 const extension = this.getExtension(file.originalname);
 
-                if (!['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(extension)) {
+                if (!['jpg', 'jpeg', 'png', 'webp'].includes(extension)) {
                     throw new Error('INVALID_PHOTO_TYPE');
                 }
 

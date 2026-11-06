@@ -255,6 +255,8 @@ class QrCardService {
         const subtitle = this.escapeXml(theme.subtitle);
         const eyebrow = this.escapeXml(theme.eyebrow);
 
+        const logoHref = 'https://pub-e3575f56ee634d70b9e3c257131b95f6.r2.dev/logo/tusorpresa-digital-logo-vertical.webp';
+
         const svg = `
             <svg xmlns="http://www.w3.org/2000/svg"
                  xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -326,10 +328,14 @@ class QrCardService {
                               font-size="11"
                               fill="${theme.accent}">tu sorpresa</text>
 
-                        <text x="200" y="486" text-anchor="middle"
-                              font-family="Arial, sans-serif"
-                              font-size="7" letter-spacing="1.5"
-                              fill="${theme.muted}">TUSORPRESADIGITAL</text>
+                        <image
+                              href="${logoHref}"
+                              x="125"
+                              y="470"
+                              width="150"
+                              height="25"
+                              preserveAspectRatio="xMidYMid meet"
+                        />
                   </g>
             </svg>`;
 

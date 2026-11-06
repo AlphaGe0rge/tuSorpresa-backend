@@ -622,6 +622,13 @@ class AuthService {
                     throw error;
                 }
 
+                if (user.emailVerified) {
+                    const error = new Error('No puedes cambiar un correo electrónico que ya ha sido verificado.');
+
+                    error.statusCode = 403;
+                    throw error;
+                }
+
                 if (!user.passwordHash) {
                     const error = new Error(
                         'Las cuentas de Google no pueden cambiar su correo desde esta opción.'
