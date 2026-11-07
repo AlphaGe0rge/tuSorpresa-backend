@@ -228,6 +228,12 @@ class PaymentService {
     }
 
     static async applyTransaction(payment, transaction) {
+        
+        const allowedStatuses = ['PENDING', 'APPROVED', 'DECLINED', 'VOIDED', 'ERROR'];
+
+        if (!allowedStatuses.includes(transaction.status)) {
+            throw new Error('INVALID_WOMPI_TRANSACTION_STATUS');
+        }
 
         if (transaction.currency !== payment.currency) {
             throw new Error('INVALID_PAYMENT_CURRENCY');
@@ -236,66 +242,84 @@ class PaymentService {
         if (Number(transaction.amount_in_cents) !== Number(payment.amountInCents)) {
             throw new Error('INVALID_PAYMENT_AMOUNT');
         }
-        
+
         if (transaction.reference !== payment.reference) {
             throw new Error('INVALID_PAYMENT_REFERENCE');
         }
 
+        if (!transaction.id) {
+            throw new Error('WOMPI_TRANSACTION_ID_REQUIRED');
+        }
+
+        if (payment.wompiTransactionId && payment.wompiTransactionId !== transaction.id) {
+            throw new Error('WOMPI_TRANSACTION_ID_MISMATCH');
+        }
+
         const previousStatus = payment.status;
+
+        // No permitir que una notificación antigua cambie un pago aprobado.
+        if (previousStatus === 'APPROVED' && transaction.status !== 'APPROVED') {
+            return;
+        }
 
         payment.wompiTransactionId = transaction.id;
         payment.status = transaction.status;
         payment.paymentMethodType = transaction.payment_method_type || null;
         payment.statusMessage = transaction.status_message || null;
 
-        if (transaction.status === 'APPROVED') {
-
-            payment.paidAt = payment.paidAt || new Date();
-
+        if (transaction.status !== 'APPROVED') {
             await payment.save();
+            return;
+        }
 
-            if (payment.surprise.status !== 'ACTIVE') {
+        payment.paidAt = payment.paidAt || new Date();
+        await payment.save();
 
-                const expiresAt = payment.durationDays === null ? null : new Date(payment.paidAt.getTime() + payment.durationDays * 24 * 60 * 60 * 1000);
+        // Consultar cuál es el intento de pago más reciente de esta sorpresa.
+        const latestPayment = await Payment.findOne({
+            where: { surpriseId: payment.surpriseId },
+            order: [['createdAt', 'DESC'], ['id', 'DESC']]
+        });
 
-                await payment.surprise.update({
-                    status: 'ACTIVE',
-                    expiresAt
-                });
-            }
+        // Un intento antiguo puede quedar registrado como aprobado,
+        // pero no debe activar la sorpresa con un plan anterior.
+        if (!latestPayment || String(latestPayment.id) !== String(payment.id)) {
+            console.error(
+                `Pago aprobado de un intento anterior. Payment: ${payment.id}, Surprise: ${payment.surpriseId}`
+            );
+            return;
+        }
 
-            if (previousStatus !== 'APPROVED') {
+        const expiresAt = payment.durationDays === null
+            ? null
+            : new Date(payment.paidAt.getTime() + payment.durationDays * 24 * 60 * 60 * 1000);
 
-                try {
+        await payment.surprise.update({
+            status: 'ACTIVE',
+            expiresAt
+        });
 
-                    const frontendUrl = process.env.FRONTEND_URL;
-                    const publicUrl = `${frontendUrl}/sorpresa/${payment.surprise.publicToken}`;
+        // No volver a enviar el correo si Wompi repite el webhook.
+        if (previousStatus === 'APPROVED') return;
 
-                    const qrBuffer = await QrCardService.generateCard(
-                        publicUrl,
-                        payment.surprise.template
-                    );
+        try {
+            const frontendUrl = process.env.FRONTEND_URL;
+            const publicUrl = `${frontendUrl}/sorpresa/${payment.surprise.publicToken}`;
 
-                    await EmailService.sendSurpriseCreated({
-                        email: payment.surprise.email,
-                        senderName: payment.surprise.senderName,
-                        publicToken: payment.surprise.publicToken,
-                        editToken: null,
-                        qrBuffer
-                    });
+            const qrBuffer = await QrCardService.generateCard(
+                publicUrl,
+                payment.surprise.template
+            );
 
-                } catch (error) {
-                    console.error('Unable to send paid surprise email:', error);
-                }
-            }
-
-        } else {
-
-            await payment.save();
-
-            if (transaction.status === 'VOIDED') {
-                await payment.surprise.update({status: 'DISABLED'});
-            }
+            await EmailService.sendSurpriseCreated({
+                email: payment.surprise.email,
+                senderName: payment.surprise.senderName,
+                publicToken: payment.surprise.publicToken,
+                editToken: null,
+                qrBuffer
+            });
+        } catch (error) {
+            console.error('Unable to send paid surprise email:', error);
         }
     }
 
