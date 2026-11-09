@@ -259,11 +259,15 @@ class QrCardService {
             const logoHref = 'https://pub-e3575f56ee634d70b9e3c257131b95f6.r2.dev/logo/tusorpresa-digital-logo-vertical.webp';
 
             const response = await axios.get(logoHref, {
-                  responseType: 'arraybuffer'
+                  responseType: 'arraybuffer',
+                  timeout: 10000
             });
 
-            const logoBase64 = Buffer.from(response.data).toString('base64');
-            const logoDataUri = `data:image/webp;base64,${logoBase64}`;
+            const logoBuffer = await sharp(Buffer.from(response.data)).png().toBuffer();
+
+            const logoBase64 = logoBuffer.toString('base64');
+
+            const logoDataUri = `data:image/png;base64,${logoBase64}`;
 
             const svg = `
             <svg xmlns="http://www.w3.org/2000/svg"
@@ -338,6 +342,7 @@ class QrCardService {
 
                         <image
                               href="${logoDataUri}"
+                              xlink:href="${logoDataUri}"
                               x="125"
                               y="470"
                               width="150"
