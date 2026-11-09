@@ -56,6 +56,7 @@ class SurpriseService {
             publicToken,
             editToken,
             status: surprise.status,
+            template: surprise.template,
             requiresPayment: !isAdmin
         };
     }
