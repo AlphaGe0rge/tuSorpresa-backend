@@ -16,27 +16,36 @@ const app = express();
 
 const PORT = process.env.PORT || 8081;
 
-const allowedOrigins = ['http://localhost:4200', process.env.FRONTEND_URL].filter(Boolean);
+const allowedOrigins = [
+    'http://localhost:4200',
+    'https://tusorpresadigital.com',
+    'https://www.tusorpresadigital.com',
+    process.env.FRONTEND_URL
+].filter(Boolean);
 
-// Middlewares
-app.use(cors({
+const corsOptions = {
     origin: (origin, callback) => {
-        // Permitir solicitudes sin Origin, como algunas llamadas de servidor
         if (!origin || allowedOrigins.includes(origin)) {
             return callback(null, true);
         }
 
-        return callback(new Error('Origen no permitido por CORS'));
-    }
-}));
+        console.error(`CORS blocked origin: ${origin}`);
+        console.error('Allowed origins:', allowedOrigins);
 
+        return callback(new Error(`Origen no permitido por CORS: ${origin}`));
+    },
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
+};
+
+// Middlewares
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Health check
 app.get('/api/health', (req, res) => {
-    res.status(200).json({
-        status: 'ok'
-    });
+    res.status(200).json({ status: 'ok' });
 });
 
 // Routes
