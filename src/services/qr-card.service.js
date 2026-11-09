@@ -1,4 +1,5 @@
 
+const { default: axios } = require('axios');
 const QRCode = require('qrcode');
 const sharp = require('sharp');
 
@@ -231,36 +232,43 @@ class QrCardService {
         return art[type] || art.default;
     }
 
-    static async generateCard(publicUrl, template) {
-      
-        const theme = this.getTheme(template);
+      static async generateCard(publicUrl, template) {
+            
+            const theme = this.getTheme(template);
 
-        const qrDataUrl = await QRCode.toDataURL(publicUrl, {
-            errorCorrectionLevel: 'H',
-            margin: 3,
-            width: 206,
-            color: {
-                dark: '#000000',
-                light: '#ffffff'
-            }
-        });
+            const qrDataUrl = await QRCode.toDataURL(publicUrl, {
+                  errorCorrectionLevel: 'H',
+                  margin: 3,
+                  width: 206,
+                  color: {
+                  dark: '#000000',
+                  light: '#ffffff'
+                  }
+            });
 
-        const qrHref = this.escapeXml(qrDataUrl);
-        const artwork = this.buildArtwork(
-            theme.decorationType,
-            theme.accent
-        );
+            const qrHref = this.escapeXml(qrDataUrl);
+            const artwork = this.buildArtwork(
+                  theme.decorationType,
+                  theme.accent
+            );
 
-        const title = this.escapeXml(theme.title);
-        const subtitle = this.escapeXml(theme.subtitle);
-        const eyebrow = this.escapeXml(theme.eyebrow);
+            const title = this.escapeXml(theme.title);
+            const subtitle = this.escapeXml(theme.subtitle);
+            const eyebrow = this.escapeXml(theme.eyebrow);
 
-        const logoHref = 'https://pub-e3575f56ee634d70b9e3c257131b95f6.r2.dev/logo/tusorpresa-digital-logo-vertical.webp';
+            const logoHref = 'https://pub-e3575f56ee634d70b9e3c257131b95f6.r2.dev/logo/tusorpresa-digital-logo-vertical.webp';
 
-        const svg = `
+            const response = await axios.get(logoHref, {
+                  responseType: 'arraybuffer'
+            });
+
+            const logoBase64 = Buffer.from(response.data).toString('base64');
+            const logoDataUri = `data:image/webp;base64,${logoBase64}`;
+
+            const svg = `
             <svg xmlns="http://www.w3.org/2000/svg"
-                 xmlns:xlink="http://www.w3.org/1999/xlink"
-                 width="400" height="500" viewBox="0 0 400 500">
+                  xmlns:xlink="http://www.w3.org/1999/xlink"
+                  width="400" height="500" viewBox="0 0 400 500">
 
                   <defs>
                         <clipPath id="cardClip">
@@ -292,18 +300,18 @@ class QrCardService {
                         </svg>
 
                         <text x="200" y="104" text-anchor="middle"
-                              font-family="Arial, sans-serif"
+                              font-family="Noto Serif, serif"
                               font-size="9" font-weight="700"
                               letter-spacing="1.6"
                               fill="${theme.accent}">${eyebrow}</text>
 
                         <text x="200" y="128" text-anchor="middle"
-                              font-family="Georgia, 'Times New Roman', serif"
+                              font-family="Noto Serif, serif"
                               font-size="23" font-weight="700"
                               fill="${theme.text}">${title}</text>
 
                         <text x="200" y="153" text-anchor="middle"
-                              font-family="Georgia, 'Times New Roman', serif"
+                              font-family="Noto Serif, serif"
                               font-size="11"
                               fill="${theme.muted}">${subtitle}</text>
 
@@ -319,17 +327,17 @@ class QrCardService {
                               preserveAspectRatio="xMidYMid meet"/>
 
                         <text x="200" y="448" text-anchor="middle"
-                              font-family="Georgia, 'Times New Roman', serif"
+                              font-family="Noto Serif, serif"
                               font-size="12" font-weight="700"
                               fill="${theme.text}">Escanea para descubrir</text>
 
                         <text x="200" y="461" text-anchor="middle"
-                              font-family="Georgia, 'Times New Roman', serif"
+                              font-family="Noto Serif, serif"
                               font-size="11"
                               fill="${theme.accent}">tu sorpresa</text>
 
                         <image
-                              href="${logoHref}"
+                              href="${logoDataUri}"
                               x="125"
                               y="470"
                               width="150"
@@ -339,11 +347,11 @@ class QrCardService {
                   </g>
             </svg>`;
 
-        return sharp(Buffer.from(svg))
-            .resize(1200, 1500)
-            .png()
-            .toBuffer();
-    }
+            return sharp(Buffer.from(svg))
+                  .resize(1200, 1500)
+                  .png()
+                  .toBuffer();
+      }
 }
 
 module.exports = QrCardService;
