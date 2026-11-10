@@ -6,6 +6,7 @@ const WompiService = require('./wompi.service');
 const EmailService = require('./email.service');
 const QrCardService = require('./qr-card.service');
 const SurpriseService = require('./surprise.service');
+const sequelize = require('../config/database');
 
 class PaymentService {
 
