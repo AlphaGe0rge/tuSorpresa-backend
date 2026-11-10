@@ -17,13 +17,15 @@ Surprise.belongsTo(User, {
 Surprise.hasMany(Payment, {
     foreignKey: 'surpriseId',
     as: 'payments',
-    onDelete: 'CASCADE',
+    onDelete: 'RESTRICT',
     onUpdate: 'CASCADE'
 });
 
 Payment.belongsTo(Surprise, {
     foreignKey: 'surpriseId',
-    as: 'surprise'
+    as: 'surprise',
+    onDelete: 'RESTRICT',
+    onUpdate: 'CASCADE'
 });
 
 module.exports = {

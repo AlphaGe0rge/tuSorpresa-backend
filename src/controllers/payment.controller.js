@@ -26,8 +26,11 @@ class PaymentController {
                 SURPRISE_ID_REQUIRED: 400,
                 PAYMENT_ID_REQUIRED: 400,
                 TRANSACTION_ID_REQUIRED: 400,
+                INVALID_SURPRISE_PLAN: 400,
                 SURPRISE_NOT_FOUND: 404,
+                PAYMENT_NOT_FOUND: 404,
                 SURPRISE_ALREADY_PAID: 409,
+                SURPRISE_NOT_PENDING_PAYMENT: 409,
                 SURPRISE_EXPIRED: 410,
                 INVALID_WOMPI_PRICE: 500,
                 INVALID_WOMPI_SIGNATURE_DATA: 500
@@ -133,17 +136,39 @@ class PaymentController {
 
             const checksum = req.headers['x-event-checksum'];
 
-            await PaymentService.processWompiWebhook(req.body, checksum);
+            await PaymentService.processWompiWebhook(
+                req.body,
+                checksum
+            );
 
-            /*MUY IMPORTANTE: Wompi necesita recibir 200.*/
             return res.sendStatus(200);
 
         } catch (error) {
+
             console.error('Wompi webhook error:', error);
 
-            return res.status(400).json({
+            const invalidEvents = [
+                'INVALID_WOMPI_ENVIRONMENT',
+                'INVALID_WOMPI_SIGNATURE',
+                'INVALID_WOMPI_HEADER_SIGNATURE',
+                'INVALID_WOMPI_EVENT',
+                'INVALID_WOMPI_TRANSACTION_STATUS',
+                'INVALID_PAYMENT_CURRENCY',
+                'INVALID_PAYMENT_AMOUNT',
+                'INVALID_PAYMENT_REFERENCE',
+                'WOMPI_TRANSACTION_ID_REQUIRED'
+            ];
+
+            if (invalidEvents.includes(error.message)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid Wompi event'
+                });
+            }
+
+            return res.status(500).json({
                 success: false,
-                message: 'Invalid Wompi event'
+                message: 'Unable to process Wompi event'
             });
         }
     }

@@ -298,47 +298,7 @@ class EmailService {
 
                         </div>
 
-
-                        <!-- FALLBACK URL -->
-
-                        <div
-                            style="
-                                margin-top:25px;
-                                padding:15px;
-                                background:#fff7f9;
-                                border-radius:12px;
-                                word-break:break-word;
-                            "
-                        >
-
-                            <p
-                                style="
-                                    margin:0 0 8px;
-                                    font-size:12px;
-                                    color:#8c7b82;
-                                "
-                            >
-                                Si el botón no funciona, copia y
-                                pega este enlace en tu navegador:
-                            </p>
-
-                            <a
-                                href="${this.escapeHtml(verificationUrl)}"
-                                target="_blank"
-                                style="
-                                    font-size:12px;
-                                    color:#a52d50;
-                                    text-decoration:underline;
-                                    overflow-wrap:anywhere;
-                                "
-                            >
-                                ${this.escapeHtml(verificationUrl)}
-                            </a>
-
-                        </div>
-
                     </div>
-
 
                     <p
                         style="
@@ -367,6 +327,7 @@ class EmailService {
 
         const publicUrl = `${frontendUrl}/sorpresa/${publicToken}`;
         const editUrl = `${frontendUrl}/edit/${editToken}`;
+        const accountUrl = `${frontendUrl}/login`
 
         return this.sendEmail({
             email,
@@ -375,7 +336,8 @@ class EmailService {
                 recipientName,
                 senderName,
                 publicUrl,
-                editUrl
+                editUrl,
+                accountUrl
             }),
             attachments: qrBuffer
                 ? [{
@@ -386,191 +348,269 @@ class EmailService {
         });
     }
 
-    static buildSurpriseCreatedEmail({senderName, publicUrl, editUrl}) {
+    static buildSurpriseCreatedEmail({ senderName, publicUrl, editUrl, accountUrl }) {
 
         return `
             <!DOCTYPE html>
-
             <html lang="es">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Tu sorpresa está lista | TuSorpresaDigital</title>
+            </head>
 
-                <head>
+            <body style="
+                margin:0;
+                padding:0;
+                background-color:#fff4f7;
+                font-family:Arial,Helvetica,sans-serif;
+                color:#35232b;
+            ">
 
-                    <meta charset="UTF-8">
+                <div style="
+                    max-width:620px;
+                    margin:0 auto;
+                    padding:35px 15px;
+                ">
 
-                    <meta
-                        name="viewport"
-                        content="width=device-width, initial-scale=1.0"
-                    >
+                    <div style="
+                        background:#ffffff;
+                        border-radius:20px;
+                        overflow:hidden;
+                        box-shadow:0 10px 35px rgba(120,30,60,0.10);
+                    ">
 
-                    <title>
-                        Tu sorpresa está lista
-                    </title>
-
-                </head>
-
-
-                <body
-                    style="
-                        margin:0;
-                        padding:0;
-                        background:#fff4f7;
-                        font-family:Arial,Helvetica,sans-serif;
-                        color:#2b1b22;
-                    "
-                >
-
-                    <div
-                        style="
-                            max-width:620px;
-                            margin:0 auto;
-                            padding:40px 20px;
-                        "
-                    >
-
-                        <div
-                            style="
-                                background:#ffffff;
-                                border-radius:24px;
-                                padding:40px 30px;
-                                text-align:center;
-                                box-shadow:
-                                    0 15px 50px
-                                    rgba(120,30,60,0.12);
-                            "
-                        >
-
-                            <div
-                                style="
-                                    font-size:42px;
-                                    margin-bottom:15px;
-                                "
-                            >
+                        <!-- HEADER -->
+                        <div style="
+                            background:linear-gradient(135deg,#c73562,#e66b8e);
+                            padding:40px 25px;
+                            text-align:center;
+                            color:#ffffff;
+                        ">
+                            <div style="font-size:42px;margin-bottom:15px;">
                                 💌
                             </div>
 
-
-                            <h1
-                                style="
-                                    margin:0 0 15px;
-                                    font-size:32px;
-                                    color:#c73562;
-                                "
-                            >
+                            <h1 style="
+                                margin:0;
+                                font-size:28px;
+                                line-height:1.3;
+                            ">
                                 ¡Tu sorpresa está lista!
                             </h1>
 
+                            <p style="
+                                margin:12px 0 0;
+                                font-size:15px;
+                                line-height:1.6;
+                                color:#fff0f4;
+                            ">
+                                Un detalle especial ya está listo para compartir.
+                            </p>
+                        </div>
 
-                            <p
-                                style="
-                                    font-size:17px;
-                                    line-height:1.6;
-                                    color:#5f4b53;
-                                "
-                            >
-                                Hola,
-                                <strong>
-                                    ${this.escapeHtml(senderName)}
-                                </strong>.
+                        <!-- CONTENT -->
+                        <div style="padding:35px 30px;">
+
+                            <p style="
+                                margin:0 0 18px;
+                                font-size:17px;
+                                line-height:1.6;
+                                color:#49343d;
+                            ">
+                                ¡Hola, <strong>${this.escapeHtml(senderName)}</strong>!
                             </p>
 
+                            <p style="
+                                margin:0 0 25px;
+                                font-size:15px;
+                                line-height:1.8;
+                                color:#6b5961;
+                            ">
+                                Nos alegra contarte que tu sorpresa personalizada
+                                se ha creado correctamente. Ahora puedes visitarla,
+                                compartirla y conservarla para ese momento especial.
+                            </p>
 
-                            <p
+                            <!-- VIEW SURPRISE -->
+                            <div style="text-align:center;margin:30px 0;">
+                                <a href="${this.escapeHtml(publicUrl)}"
+                                target="_blank"
                                 style="
-                                    font-size:16px;
+                                    display:inline-block;
+                                    padding:15px 32px;
+                                    background:#c73562;
+                                    color:#ffffff;
+                                    text-decoration:none;
+                                    border-radius:10px;
+                                    font-size:15px;
+                                    font-weight:bold;
+                                ">
+                                    💖 Ver mi sorpresa
+                                </a>
+                            </div>
+
+                            <!-- EDIT OPTIONS -->
+                            <div style="
+                                margin-top:35px;
+                                padding:24px;
+                                background:#fff7f9;
+                                border:1px solid #f5dce5;
+                                border-radius:14px;
+                            ">
+
+                                <h2 style="
+                                    margin:0 0 12px;
+                                    font-size:19px;
+                                    color:#c73562;
+                                ">
+                                    ¿Quieres editar tu sorpresa?
+                                </h2>
+
+                                <p style="
+                                    margin:0 0 20px;
+                                    font-size:14px;
                                     line-height:1.7;
                                     color:#6b5961;
-                                "
-                            >
-                                Tu página personalizada fue creada
-                                correctamente.
-                                Guarda este correo porque aquí tienes
-                                los enlaces para acceder a ella.
-                            </p>
+                                ">
+                                    Puedes modificar su contenido cuando lo necesites.
+                                    Elige la opción que corresponda a tu caso:
+                                </p>
 
+                                <p style="
+                                    margin:0 0 8px;
+                                    font-size:14px;
+                                    font-weight:bold;
+                                    color:#49343d;
+                                ">
+                                    Si tienes una cuenta:
+                                </p>
 
-                            <!-- VIEW -->
+                                <p style="
+                                    margin:0 0 15px;
+                                    font-size:13px;
+                                    line-height:1.7;
+                                    color:#6b5961;
+                                ">
+                                    Inicia sesión en TuSorpresaDigital y accede a
+                                    tu perfil. Allí encontrarás tu sorpresa para
+                                    editarla y administrarla.
+                                </p>
 
-                            <div style="margin-top:20px;">
-                                <a
-                                    href="${this.escapeHtml(editUrl)}"
+                                <div style="text-align:center;margin-bottom:25px;">
+                                    <a href="${this.escapeHtml(accountUrl)}"
                                     target="_blank"
                                     style="
                                         display:inline-block;
-                                        padding:14px 28px;
+                                        padding:12px 24px;
                                         background:#ffffff;
                                         color:#c73562;
                                         text-decoration:none;
-                                        border:2px solid #d94670;
-                                        border-radius:12px;
-                                        font-size:15px;
+                                        border:1px solid #d94670;
+                                        border-radius:9px;
+                                        font-size:14px;
                                         font-weight:bold;
-                                    "
-                                >
-                                    ✏️ Editar mi sorpresa
-                                </a>
-                            </div>
+                                    ">
+                                        Ingresar a mi cuenta
+                                    </a>
+                                </div>
 
-                            <div style="
-                                 margin-top:18px;
-                                 padding:15px;
-                                 background:#fff7f9;
-                                 border-radius:12px;
-                                 word-break:break-word;
-                            ">
-                                <p style="font-size:12px;color:#8c7b82;margin:0 0 8px;">
-                                    Enlace privado para editar tu sorpresa:
-                                </p>
-
-                                <a
-                                    href="${this.escapeHtml(editUrl)}"
-                                    target="_blank"
-                                    style="font-size:12px;color:#a52d50;"
-                                >
-                                    ${this.escapeHtml(editUrl)}
-                                </a>
-                            </div>
-                            <div
-                                style="
-                                    margin-top:35px;
-                                    padding-top:25px;
+                                <div style="
                                     border-top:1px solid #f0dce3;
-                                "
-                            >
+                                    margin:20px 0;
+                                "></div>
 
-                                <p
+                                <p style="
+                                    margin:0 0 8px;
+                                    font-size:14px;
+                                    font-weight:bold;
+                                    color:#49343d;
+                                ">
+                                    Si creaste tu sorpresa sin una cuenta:
+                                </p>
+
+                                <p style="
+                                    margin:0 0 15px;
+                                    font-size:13px;
+                                    line-height:1.7;
+                                    color:#6b5961;
+                                ">
+                                    Utiliza el siguiente enlace privado para
+                                    acceder a la edición de tu sorpresa.
+                                    Guárdalo en un lugar seguro.
+                                </p>
+
+                                <div style="text-align:center;">
+                                    <a href="${this.escapeHtml(editUrl)}"
+                                    target="_blank"
                                     style="
-                                        margin:0;
-                                        font-size:13px;
-                                        line-height:1.6;
-                                        color:#8c7b82;
-                                    "
-                                >
-                                    Guarda especialmente el enlace
-                                    de edición. Lo necesitarás si
-                                    quieres modificar tu sorpresa
-                                    posteriormente.
+                                        display:inline-block;
+                                        padding:12px 24px;
+                                        background:#ffffff;
+                                        color:#c73562;
+                                        text-decoration:none;
+                                        border:1px solid #d94670;
+                                        border-radius:9px;
+                                        font-size:14px;
+                                        font-weight:bold;
+                                    ">
+                                        ✏️ Editar mi sorpresa
+                                    </a>
+                                </div>
+
+                                <p style="
+                                    margin:15px 0 0;
+                                    font-size:11px;
+                                    line-height:1.6;
+                                    color:#8c7b82;
+                                    word-break:break-word;
+                                ">
+                                    Enlace privado: ${this.escapeHtml(editUrl)}
                                 </p>
 
                             </div>
+
+                            <!-- FOOTER MESSAGE -->
+                            <p style="
+                                margin:30px 0 0;
+                                text-align:center;
+                                font-size:14px;
+                                line-height:1.8;
+                                color:#8c7b82;
+                            ">
+                                Gracias por confiar en nosotros para crear
+                                momentos especiales. 💗
+                            </p>
 
                         </div>
-
-
-                        <p
-                            style="
-                                margin-top:25px;
-                                text-align:center;
-                                font-size:12px;
-                                color:#a08e95;
-                            "
-                        >
-                            Este correo fue enviado automáticamente.
-                        </p>
-
                     </div>
 
-                </body>
+                    <!-- FOOTER -->
+                    <div style="
+                        padding:22px 15px;
+                        text-align:center;
+                    ">
+                        <p style="
+                            margin:0 0 7px;
+                            font-size:13px;
+                            font-weight:bold;
+                            color:#c73562;
+                        ">
+                            TuSorpresaDigital
+                        </p>
 
+                        <p style="
+                            margin:0;
+                            font-size:11px;
+                            line-height:1.6;
+                            color:#a08e95;
+                        ">
+                            Este es un correo automático. Por favor, no respondas a este mensaje.
+                        </p>
+                    </div>
+
+                </div>
+            </body>
             </html>
         `;
     }
@@ -696,14 +736,6 @@ class EmailService {
                         Si no solicitaste el cambio, ignora este mensaje.
                     </p>
 
-                    <div style="margin-top:24px;padding:15px;background:#fff7f9;border-radius:12px;overflow-wrap:anywhere;">
-                        <p style="font-size:12px;color:#8c7b82;">
-                            Si el botón no funciona, copia este enlace en tu navegador:
-                        </p>
-                        <a href="${safeUrl}" style="font-size:12px;color:#a52d50;">
-                            ${safeUrl}
-                        </a>
-                    </div>
                 </div>
             </body>
             </html>

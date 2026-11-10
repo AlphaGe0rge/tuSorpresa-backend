@@ -1,7 +1,8 @@
+
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
-const Payment = sequelize.define('Payment',{
+const Payment = sequelize.define('Payment', {
     id: {
         type: DataTypes.UUID,
         defaultValue: DataTypes.UUIDV4,
@@ -12,6 +13,12 @@ const Payment = sequelize.define('Payment',{
         type: DataTypes.UUID,
         allowNull: false,
         field: 'surprise_id'
+    },
+    attemptNumber: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        defaultValue: 1,
+        field: 'attempt_number'
     },
     provider: {
         type: DataTypes.ENUM('WOMPI'),
@@ -26,6 +33,7 @@ const Payment = sequelize.define('Payment',{
     wompiTransactionId: {
         type: DataTypes.STRING(255),
         allowNull: true,
+        unique: true,
         field: 'wompi_transaction_id'
     },
     amountInCents: {
@@ -40,6 +48,7 @@ const Payment = sequelize.define('Payment',{
     },
     status: {
         type: DataTypes.ENUM(
+            'CREATED',
             'PENDING',
             'APPROVED',
             'DECLINED',
@@ -47,7 +56,7 @@ const Payment = sequelize.define('Payment',{
             'ERROR'
         ),
         allowNull: false,
-        defaultValue: 'PENDING'
+        defaultValue: 'CREATED'
     },
     paymentMethodType: {
         type: DataTypes.STRING(100),
@@ -59,16 +68,18 @@ const Payment = sequelize.define('Payment',{
         allowNull: true,
         field: 'status_message'
     },
+    failureReason: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+        field: 'failure_reason'
+    },
     paidAt: {
         type: DataTypes.DATE,
         allowNull: true,
         field: 'paid_at'
     },
     plan: {
-        type: DataTypes.ENUM(
-            '30-days',
-            'permanent'
-        ),
+        type: DataTypes.ENUM('30-days', 'permanent'),
         allowNull: false
     },
     durationDays: {
@@ -89,10 +100,17 @@ const Payment = sequelize.define('Payment',{
         allowNull: false,
         field: 'updated_at'
     }
-},
-{
+}, {
     tableName: 'payments',
-    timestamps: true
+    timestamps: true,
+    indexes: [
+        {
+            fields: ['surprise_id', 'created_at']
+        },
+        {
+            fields: ['status', 'created_at']
+        }
+    ]
 });
 
 module.exports = Payment;

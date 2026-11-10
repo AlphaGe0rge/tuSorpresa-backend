@@ -31,61 +31,85 @@ class PaymentService {
         return selectedPlan;
     }
 
+    
     static async createPayment(surpriseId, plan, userId = null, editToken = null) {
 
         if (!surpriseId) throw new Error('SURPRISE_ID_REQUIRED');
-        
-        const surprise = await Surprise.findByPk(surpriseId);
-
-        if (!surprise) throw new Error('SURPRISE_NOT_FOUND');
-
-        await this.authorizeSurpriseAccess({surprise, userId, editToken});
-
-        if (surprise.status === 'ACTIVE') {
-            throw new Error('SURPRISE_ALREADY_PAID');
-        }
-
-        if (surprise.status === 'EXPIRED') {
-            throw new Error('SURPRISE_EXPIRED');
-        }
-
-        if (surprise.status !== 'PENDING_PAYMENT') {
-            throw new Error('SURPRISE_NOT_PENDING_PAYMENT');
-        }
 
         const planDetails = this.getPlanDetails(plan);
-        const priceCop = planDetails.priceCop;
-        const amountInCents = priceCop * 100;
 
-        const reference = `SURPRISE-${surprise.id}-${crypto.randomUUID()}`;
+        const result = await sequelize.transaction(async (transaction) => {
 
-        const signature = WompiService.generateIntegritySignature({
-            reference,
-            amountInCents,
-            currency: 'COP'
+            const surprise = await Surprise.findByPk(surpriseId, {
+                transaction,
+                lock: transaction.LOCK.UPDATE
+            });
+
+            if (!surprise) throw new Error('SURPRISE_NOT_FOUND');
+
+            await this.authorizeSurpriseAccess({
+                surprise,
+                userId,
+                editToken
+            });
+
+            if (surprise.status === 'ACTIVE') {
+                throw new Error('SURPRISE_ALREADY_PAID');
+            }
+
+            if (surprise.status === 'EXPIRED') {
+                throw new Error('SURPRISE_EXPIRED');
+            }
+
+            if (surprise.status !== 'PENDING_PAYMENT') {
+                throw new Error('SURPRISE_NOT_PENDING_PAYMENT');
+            }
+
+            const amountInCents = planDetails.priceCop * 100;
+
+            const reference = `SURPRISE-${surprise.id}-${crypto.randomUUID()}`;
+
+            const signature = WompiService.generateIntegritySignature({
+                reference,
+                amountInCents,
+                currency: 'COP'
+            });
+
+            const attemptNumber = await Payment.count({
+                where: {
+                    surpriseId: surprise.id
+                },
+                transaction
+            }) + 1;
+
+            const payment = await Payment.create({
+                surpriseId: surprise.id,
+                attemptNumber,
+                provider: 'WOMPI',
+                reference,
+                amountInCents,
+                currency: 'COP',
+                status: 'CREATED',
+                plan,
+                durationDays: planDetails.durationDays
+            }, {
+                transaction
+            });
+
+            return {
+                paymentId: payment.id,
+                reference,
+                amountInCents,
+                currency: 'COP',
+                publicKey: process.env.WOMPI_PUBLIC_KEY,
+                signature,
+                redirectUrl: process.env.WOMPI_REDIRECT_URL
+            };
         });
 
-        const payment = await Payment.create({
-            surpriseId: surprise.id,
-            provider: 'WOMPI',
-            reference,
-            amountInCents,
-            currency: 'COP',
-            status: 'PENDING',
-            plan,
-            durationDays: planDetails.durationDays
-        });
-
-        return {
-            paymentId: payment.id,
-            reference,
-            amountInCents,
-            currency: 'COP',
-            publicKey: process.env.WOMPI_PUBLIC_KEY,
-            signature,
-            redirectUrl: process.env.WOMPI_REDIRECT_URL
-        };
+        return result;
     }
+
 
     static async authorizeSurpriseAccess({surprise, userId = null, editToken = null}) {
 
@@ -266,6 +290,7 @@ class PaymentService {
         payment.status = transaction.status;
         payment.paymentMethodType = transaction.payment_method_type || null;
         payment.statusMessage = transaction.status_message || null;
+        payment.failureReason = ['DECLINED', 'ERROR', 'VOIDED'].includes(transaction.status) ? (transaction.status_message || transaction.status) : null;
 
         if (transaction.status !== 'APPROVED') {
             await payment.save();
@@ -327,11 +352,13 @@ class PaymentService {
         return {
             paymentId: payment.id,
             reference: payment.reference,
+            attemptNumber: payment.attemptNumber,
             status: payment.status,
             amountInCents: payment.amountInCents,
             currency: payment.currency,
             paymentMethodType: payment.paymentMethodType,
             statusMessage: payment.statusMessage,
+            failureReason: payment.failureReason,
             paidAt: payment.paidAt,
             surprise: {
                 id: payment.surprise.id,
