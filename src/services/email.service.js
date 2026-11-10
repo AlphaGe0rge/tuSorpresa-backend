@@ -366,7 +366,7 @@ class EmailService {
         const frontendUrl = process.env.FRONTEND_URL;
 
         const publicUrl = `${frontendUrl}/sorpresa/${publicToken}`;
-        const editUrl = `${frontendUrl}/editar/${editToken}`;
+        const editUrl = `${frontendUrl}/edit/${editToken}`;
 
         return this.sendEmail({
             email,
@@ -490,30 +490,45 @@ class EmailService {
 
                             <!-- VIEW -->
 
-                            <div
-                                style="
-                                    margin-top:30px;
-                                "
-                            >
-
+                            <div style="margin-top:20px;">
                                 <a
-                                    href="${publicUrl}"
+                                    href="${this.escapeHtml(editUrl)}"
+                                    target="_blank"
                                     style="
                                         display:inline-block;
-                                        padding:15px 28px;
-                                        background:#d94670;
-                                        color:#ffffff;
+                                        padding:14px 28px;
+                                        background:#ffffff;
+                                        color:#c73562;
                                         text-decoration:none;
+                                        border:2px solid #d94670;
                                         border-radius:12px;
-                                        font-size:16px;
+                                        font-size:15px;
                                         font-weight:bold;
                                     "
                                 >
-                                    💖 Ver mi sorpresa
+                                    ✏️ Editar mi sorpresa
                                 </a>
-
                             </div>
 
+                            <div style="
+                                 margin-top:18px;
+                                 padding:15px;
+                                 background:#fff7f9;
+                                 border-radius:12px;
+                                 word-break:break-word;
+                            ">
+                                <p style="font-size:12px;color:#8c7b82;margin:0 0 8px;">
+                                    Enlace privado para editar tu sorpresa:
+                                </p>
+
+                                <a
+                                    href="${this.escapeHtml(editUrl)}"
+                                    target="_blank"
+                                    style="font-size:12px;color:#a52d50;"
+                                >
+                                    ${this.escapeHtml(editUrl)}
+                                </a>
+                            </div>
                             <div
                                 style="
                                     margin-top:35px;
