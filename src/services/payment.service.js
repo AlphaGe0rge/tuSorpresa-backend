@@ -341,7 +341,7 @@ class PaymentService {
                 email: payment.surprise.email,
                 senderName: payment.surprise.senderName,
                 publicToken: payment.surprise.publicToken,
-                editToken: null,
+                editToken: payment.surprise.editToken,
                 qrBuffer
             });
         } catch (error) {

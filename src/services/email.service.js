@@ -554,23 +554,12 @@ class EmailService {
                                         font-size:14px;
                                         font-weight:bold;
                                     ">
-                                        ✏️ Editar mi sorpresa
+                                        Editar mi sorpresa
                                     </a>
                                 </div>
 
-                                <p style="
-                                    margin:15px 0 0;
-                                    font-size:11px;
-                                    line-height:1.6;
-                                    color:#8c7b82;
-                                    word-break:break-word;
-                                ">
-                                    Enlace privado: ${this.escapeHtml(editUrl)}
-                                </p>
-
                             </div>
 
-                            <!-- FOOTER MESSAGE -->
                             <p style="
                                 margin:30px 0 0;
                                 text-align:center;
