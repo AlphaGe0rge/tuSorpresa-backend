@@ -111,33 +111,32 @@ class PaymentService {
         return result;
     }
 
-
     static async authorizeSurpriseAccess({surprise, userId = null, editToken = null}) {
 
         if (!surprise) {
             throw new Error('SURPRISE_NOT_FOUND');
         }
 
-        if (userId) {
-            if (surprise.userId !== userId) {
+        if (userId != null) {
+
+            if (String(surprise.userId) !== String(userId)) {
                 throw new Error('SURPRISE_NOT_FOUND');
             }
 
             return true;
         }
 
-        if (!editToken) {
+        if (typeof editToken !== 'string' ||  !editToken || !surprise.editTokenHash) {
             throw new Error('PAYMENT_AUTH_REQUIRED');
         }
 
-        const editTokenHash = SurpriseService.hashEditToken(editToken);
+        const providedHash = SurpriseService.hashEditToken(editToken);
 
-        const validToken = crypto.timingSafeEqual(
-            Buffer.from(editTokenHash, 'hex'),
-            Buffer.from(surprise.editTokenHash, 'hex')
-        );
+        const providedBuffer = Buffer.from(providedHash, 'hex');
 
-        if (!validToken) {
+        const storedBuffer = Buffer.from(surprise.editTokenHash, 'hex');
+
+        if (providedBuffer.length !== storedBuffer.length || !crypto.timingSafeEqual(providedBuffer, storedBuffer)) {
             throw new Error('PAYMENT_AUTH_REQUIRED');
         }
 
@@ -341,9 +340,9 @@ class PaymentService {
                 email: payment.surprise.email,
                 senderName: payment.surprise.senderName,
                 publicToken: payment.surprise.publicToken,
-                editToken: payment.surprise.editToken,
                 qrBuffer
             });
+            
         } catch (error) {
             console.error('Unable to send paid surprise email:', error);
         }

@@ -170,57 +170,6 @@ class SurpriseService {
         return surprise;
     }
 
-    static async getByEditToken(editToken) {
-
-        if (!editToken) throw new Error('SURPRISE_NOT_FOUND');
-        
-        const editTokenHash = this.hashEditToken(editToken);
-
-        const surprise = await Surprise.findOne({
-            where: {
-                editTokenHash
-            }
-        });
-
-        if (!surprise) throw new Error('SURPRISE_NOT_FOUND');
-        
-        await this.ensureAvailable(surprise);
-
-        return this.serializeSurprise(surprise);
-    }
-
-    static async updateByEditToken(editToken, data) {
-
-        if (!editToken) throw new Error('SURPRISE_NOT_FOUND');
-        
-        const editTokenHash = this.hashEditToken(editToken);
-
-        const surprise = await Surprise.findOne({
-            where: {
-                editTokenHash
-            }
-        });
-
-        if (!surprise) throw new Error('SURPRISE_NOT_FOUND');
-        
-        await this.ensureAvailable(surprise);
-
-        const validated = this.validateData(data);
-
-        await surprise.update({
-            template: validated.template,
-            recipientName: validated.recipientName,
-            email: validated.email,
-            senderName: validated.senderName,
-            title: validated.title,
-            message: validated.message,
-            dynamicData: validated.dynamicData,
-            expiresAt: validated.expiresAt
-        });
-
-        return this.serializeSurprise(surprise);
-    }
-
     static async uploadPhotosByUser(surpriseId, userId, files) {
 
         if (!userId) throw new Error('USER_REQUIRED');
@@ -254,23 +203,6 @@ class SurpriseService {
         if (!surprise) throw new Error('SURPRISE_NOT_FOUND');
         
         return this.uploadPhotosToSurprise(surprise, files);
-    }
-
-    static async deletePhoto(editToken, photoKey) {
-
-        if (!editToken) throw new Error('SURPRISE_NOT_FOUND');
-        
-        const editTokenHash = this.hashEditToken(editToken);
-
-        const surprise = await Surprise.findOne({
-            where: {
-                editTokenHash
-            }
-        });
-
-        if (!surprise) throw new Error('SURPRISE_NOT_FOUND');
-    
-        return this.deletePhotoFromSurprise(surprise, photoKey);
     }
 
     static async findOwnedSurprise(surpriseId, userId) {

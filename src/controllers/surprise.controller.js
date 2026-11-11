@@ -261,91 +261,6 @@ class SurpriseController {
         }
     }
 
-    static async getByEditToken(req, res) {
-
-        try {
-
-            const {editToken} = req.params;
-
-            const result = await SurpriseService.getByEditToken(editToken);
-
-            return res.status(200).json({
-                success: true,
-                data: result
-            });
-
-        } catch (error) {
-
-            if (error.message === 'SURPRISE_NOT_FOUND') {
-
-                return res.status(404).json({
-                    success: false,
-                    message: 'Surprise not found'
-                });
-            }
-
-            if (error.message === 'SURPRISE_EXPIRED') {
-                return res.status(410).json({
-                    success: false,
-                    message: 'Surprise expired'
-
-                });
-            }
-
-            console.error('Error getting surprise by edit token:', error);
-
-            return res.status(500).json({
-                success: false,
-                message: 'Unable to get surprise'
-            });
-        }
-    }
-
-    static async updateByEditToken(req, res) {
-
-        try {
-
-            const {editToken} = req.params;
-
-            const result = await SurpriseService.updateByEditToken(editToken, req.body);
-
-            return res.status(200).json({
-                success: true,
-                data: result
-            });
-
-        } catch (error) {
-
-            if (SurpriseController.isValidationError(error)) {
-                return res.status(400).json({
-                    success: false,
-                    message: error.message
-                });
-            }
-
-            if (error.message === 'SURPRISE_NOT_FOUND') {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Surprise not found'
-                });
-            }
-
-            if (error.message === 'SURPRISE_EXPIRED') {
-                return res.status(410).json({
-                    success: false,
-                    message: 'Surprise expired'
-                });
-            }
-
-            console.error('Error updating surprise:', error);
-
-            return res.status(500).json({
-                success: false,
-                message: 'Unable to update surprise'
-            });
-        }
-    }
-
     static async uploadSurprisePhotos(req, res) {
 
         try {
@@ -367,36 +282,6 @@ class SurpriseController {
                 PHOTOS_REQUIRED: 400,
                 TOO_MANY_PHOTOS: 400,
                 INVALID_PHOTO_TYPE: 400
-            };
-
-            return res.status(statusCodes[error.message] || 500).json({
-                success: false,
-                message: error.message
-            });
-        }
-    }
-
-    static async deleteSurprisePhoto(req, res) {
-
-        try {
-
-            const {editToken} = req.params;
-
-            const {key} = req.body;
-
-            const result = await SurpriseService.deletePhoto(editToken, key);
-
-            return res.status(200).json({
-                success: true,
-                data: result
-            });
-
-        } catch (error) {
-
-            const statusCodes = {
-                SURPRISE_NOT_FOUND: 404,
-                SURPRISE_EXPIRED: 410,
-                PHOTO_NOT_FOUND: 404
             };
 
             return res.status(statusCodes[error.message] || 500).json({

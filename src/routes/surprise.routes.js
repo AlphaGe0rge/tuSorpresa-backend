@@ -13,10 +13,7 @@ router.get('/my/:id', authMiddleware, SurpriseController.getMyById);
 router.put('/my/:id', authMiddleware, SurpriseController.updateMyById);
 router.post('/my/:id/photos', authMiddleware, uploadPhotos.array('photos', 3), SurpriseController.uploadMySurprisePhotos);
 router.delete('/my/:id/photos', authMiddleware, SurpriseController.deleteMySurprisePhoto);
-router.get('/edit/:editToken', SurpriseController.getByEditToken);
-router.put('/edit/:editToken', SurpriseController.updateByEditToken);
-router.post('/edit/:editToken/photos', uploadPhotos.array('photos', 3), SurpriseController.uploadSurprisePhotos);
-router.delete('/edit/:editToken/photos', SurpriseController.deleteSurprisePhoto);
+router.post('/creation/:editToken/photos', uploadPhotos.array('photos', 3), SurpriseController.uploadSurprisePhotos);
 router.get('/:publicToken', SurpriseController.getPublic);
 
 module.exports = router;

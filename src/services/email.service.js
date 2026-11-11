@@ -321,13 +321,13 @@ class EmailService {
         `;
     }
 
-    static async sendSurpriseCreated({email, recipientName, senderName, publicToken, editToken, qrBuffer}) {
+        
+    static async sendSurpriseCreated({email, recipientName, senderName, publicToken, qrBuffer}) {
 
         const frontendUrl = process.env.FRONTEND_URL;
 
         const publicUrl = `${frontendUrl}/sorpresa/${publicToken}`;
-        const editUrl = `${frontendUrl}/edit/${editToken}`;
-        const accountUrl = `${frontendUrl}/login`
+        const accountUrl = `${frontendUrl}/login`;
 
         return this.sendEmail({
             email,
@@ -336,19 +336,13 @@ class EmailService {
                 recipientName,
                 senderName,
                 publicUrl,
-                editUrl,
                 accountUrl
             }),
-            attachments: qrBuffer
-                ? [{
-                    name: 'qr-tu-sorpresa.png',
-                    content: qrBuffer.toString('base64')
-                }]
-                : []
+            attachments: qrBuffer ? [{name: 'qr-tu-sorpresa.png', content: qrBuffer.toString('base64')}] : []
         });
     }
 
-    static buildSurpriseCreatedEmail({ senderName, publicUrl, editUrl, accountUrl }) {
+    static buildSurpriseCreatedEmail({senderName, publicUrl, accountUrl}) {
 
         return `
             <!DOCTYPE html>
@@ -380,7 +374,6 @@ class EmailService {
                         box-shadow:0 10px 35px rgba(120,30,60,0.10);
                     ">
 
-                        <!-- HEADER -->
                         <div style="
                             background:linear-gradient(135deg,#c73562,#e66b8e);
                             padding:40px 25px;
@@ -391,11 +384,7 @@ class EmailService {
                                 💌
                             </div>
 
-                            <h1 style="
-                                margin:0;
-                                font-size:28px;
-                                line-height:1.3;
-                            ">
+                            <h1 style="margin:0;font-size:28px;line-height:1.3;">
                                 ¡Tu sorpresa está lista!
                             </h1>
 
@@ -409,7 +398,6 @@ class EmailService {
                             </p>
                         </div>
 
-                        <!-- CONTENT -->
                         <div style="padding:35px 30px;">
 
                             <p style="
@@ -432,7 +420,6 @@ class EmailService {
                                 compartirla y conservarla para ese momento especial.
                             </p>
 
-                            <!-- VIEW SURPRISE -->
                             <div style="text-align:center;margin:30px 0;">
                                 <a href="${this.escapeHtml(publicUrl)}"
                                 target="_blank"
@@ -450,7 +437,6 @@ class EmailService {
                                 </a>
                             </div>
 
-                            <!-- EDIT OPTIONS -->
                             <div style="
                                 margin-top:35px;
                                 padding:24px;
@@ -473,31 +459,12 @@ class EmailService {
                                     line-height:1.7;
                                     color:#6b5961;
                                 ">
-                                    Puedes modificar su contenido cuando lo necesites.
-                                    Elige la opción que corresponda a tu caso:
+                                    Para editar y administrar tus sorpresas,
+                                    necesitas iniciar sesión en TuSorpresaDigital.
+                                    Una vez dentro, podrás acceder a ellas desde tu perfil.
                                 </p>
 
-                                <p style="
-                                    margin:0 0 8px;
-                                    font-size:14px;
-                                    font-weight:bold;
-                                    color:#49343d;
-                                ">
-                                    Si tienes una cuenta:
-                                </p>
-
-                                <p style="
-                                    margin:0 0 15px;
-                                    font-size:13px;
-                                    line-height:1.7;
-                                    color:#6b5961;
-                                ">
-                                    Inicia sesión en TuSorpresaDigital y accede a
-                                    tu perfil. Allí encontrarás tu sorpresa para
-                                    editarla y administrarla.
-                                </p>
-
-                                <div style="text-align:center;margin-bottom:25px;">
+                                <div style="text-align:center;">
                                     <a href="${this.escapeHtml(accountUrl)}"
                                     target="_blank"
                                     style="
@@ -512,49 +479,6 @@ class EmailService {
                                         font-weight:bold;
                                     ">
                                         Ingresar a mi cuenta
-                                    </a>
-                                </div>
-
-                                <div style="
-                                    border-top:1px solid #f0dce3;
-                                    margin:20px 0;
-                                "></div>
-
-                                <p style="
-                                    margin:0 0 8px;
-                                    font-size:14px;
-                                    font-weight:bold;
-                                    color:#49343d;
-                                ">
-                                    Si creaste tu sorpresa sin una cuenta:
-                                </p>
-
-                                <p style="
-                                    margin:0 0 15px;
-                                    font-size:13px;
-                                    line-height:1.7;
-                                    color:#6b5961;
-                                ">
-                                    Utiliza el siguiente enlace privado para
-                                    acceder a la edición de tu sorpresa.
-                                    Guárdalo en un lugar seguro.
-                                </p>
-
-                                <div style="text-align:center;">
-                                    <a href="${this.escapeHtml(editUrl)}"
-                                    target="_blank"
-                                    style="
-                                        display:inline-block;
-                                        padding:12px 24px;
-                                        background:#ffffff;
-                                        color:#c73562;
-                                        text-decoration:none;
-                                        border:1px solid #d94670;
-                                        border-radius:9px;
-                                        font-size:14px;
-                                        font-weight:bold;
-                                    ">
-                                        Editar mi sorpresa
                                     </a>
                                 </div>
 
@@ -574,7 +498,6 @@ class EmailService {
                         </div>
                     </div>
 
-                    <!-- FOOTER -->
                     <div style="
                         padding:22px 15px;
                         text-align:center;
@@ -745,9 +668,8 @@ class EmailService {
             throw new Error('FRONTEND_URL no está configurada.');
         }
 
-        const verificationUrl =
-            `${frontendUrl.replace(/\/$/, '')}/verify-email-change` +
-            `?token=${encodeURIComponent(token)}`;
+        const verificationUrl = `${frontendUrl.replace(/\/$/, '')}/verify-email-change` +
+                                `?token=${encodeURIComponent(token)}`;
 
         const safeName = this.escapeHtml(name);
 
