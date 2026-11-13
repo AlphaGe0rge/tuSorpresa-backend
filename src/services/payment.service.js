@@ -324,21 +324,9 @@ class PaymentService {
             throw new Error('WOMPI_TRANSACTION_ID_MISMATCH');
         }
 
-        /*
-        * Obtener el identificador de la sorpresa.
-        * El bloqueo real se hace dentro de la transacción.
-        */
         const surpriseId = payment.surpriseId;
 
         const result = await sequelize.transaction(async (dbTransaction) => {
-
-            /*
-            * IMPORTANTE:
-            * Mantener siempre el mismo orden de bloqueo:
-            * primero Surprise y después Payment.
-            *
-            * createPayment también bloquea primero Surprise.
-            */
 
             const surprise = await Surprise.findByPk(surpriseId, {
                 transaction: dbTransaction,
@@ -358,35 +346,25 @@ class PaymentService {
                 throw new Error('PAYMENT_NOT_FOUND');
             }
 
-            // Verificar nuevamente que el pago corresponde a la referencia.
             if (lockedPayment.reference !== wompiTransaction.reference) {
                 throw new Error('INVALID_PAYMENT_REFERENCE');
             }
 
-            if (
-                lockedPayment.wompiTransactionId &&
-                lockedPayment.wompiTransactionId !== wompiTransaction.id
-            ) {
+            if (lockedPayment.wompiTransactionId && lockedPayment.wompiTransactionId !== wompiTransaction.id) {
                 throw new Error('WOMPI_TRANSACTION_ID_MISMATCH');
             }
 
             const previousStatus = lockedPayment.status;
 
             // No permitir que una notificación antigua cambie un pago aprobado.
-            if (
-                previousStatus === 'APPROVED' &&
-                wompiTransaction.status !== 'APPROVED'
-            ) {
+            if (previousStatus === 'APPROVED' && wompiTransaction.status !== 'APPROVED') {
                 return {
                     shouldSendCreationEmail: false
                 };
             }
 
             // Un pago ya aprobado no debe procesarse nuevamente.
-            if (
-                previousStatus === 'APPROVED' &&
-                wompiTransaction.status === 'APPROVED'
-            ) {
+            if (previousStatus === 'APPROVED' && wompiTransaction.status === 'APPROVED') {
                 return {
                     shouldSendCreationEmail: false
                 };
@@ -394,11 +372,8 @@ class PaymentService {
 
             lockedPayment.wompiTransactionId = wompiTransaction.id;
             lockedPayment.status = wompiTransaction.status;
-            lockedPayment.paymentMethodType =
-                wompiTransaction.payment_method_type || null;
-
-            lockedPayment.statusMessage =
-                wompiTransaction.status_message || null;
+            lockedPayment.paymentMethodType = wompiTransaction.payment_method_type || null;
+            lockedPayment.statusMessage = wompiTransaction.status_message || null;
 
             lockedPayment.failureReason = [
                 'DECLINED',
@@ -424,35 +399,17 @@ class PaymentService {
                 transaction: dbTransaction
             });
 
-            /*
-            * Validar coherencia del plan.
-            */
-            if (
-                lockedPayment.plan === '30-days' &&
-                Number(lockedPayment.durationDays) !== 30
-            ) {
+            if (lockedPayment.plan === '30-days' && Number(lockedPayment.durationDays) !== 30) {
                 throw new Error('INVALID_PAYMENT_PLAN');
             }
 
-            if (
-                ['permanent', 'permanent-upgrade'].includes(lockedPayment.plan) &&
-                lockedPayment.durationDays !== null
-            ) {
+            if (['permanent', 'permanent-upgrade'].includes(lockedPayment.plan) && lockedPayment.durationDays !== null) {
                 throw new Error('INVALID_PAYMENT_PLAN');
             }
 
-            /*
-            * Evitar que un pago anterior reemplace una sorpresa
-            * que ya fue convertida a permanente.
-            */
-            const isAlreadyPermanent =
-                surprise.status === 'ACTIVE' &&
-                surprise.expiresAt === null;
+            const isAlreadyPermanent = surprise.status === 'ACTIVE' && surprise.expiresAt === null;
 
-            if (
-                isAlreadyPermanent &&
-                lockedPayment.plan !== 'permanent-upgrade'
-            ) {
+            if (isAlreadyPermanent && lockedPayment.plan !== 'permanent-upgrade') {
                 console.warn(
                     `La sorpresa ${surprise.id} ya es permanente. ` +
                     `No se aplicará nuevamente el pago ${lockedPayment.id}.`
@@ -463,22 +420,12 @@ class PaymentService {
                 };
             }
 
-            /*
-            * Validar la recuperación permanente.
-            *
-            * No exigimos que la sorpresa siga en EXPIRED:
-            * si el pago se inició dentro del plazo, debe respetarse
-            * aunque Wompi confirme después de los 20 días.
-            */
             if (lockedPayment.plan === 'permanent-upgrade') {
 
                 const deadline = surprise.gracePeriodEndsAt;
                 const paymentCreatedAt = new Date(lockedPayment.createdAt);
 
-                if (
-                    !deadline ||
-                    paymentCreatedAt > new Date(deadline)
-                ) {
+                if (!deadline || paymentCreatedAt > new Date(deadline)) {
                     console.error(
                         `Recuperación fuera del periodo permitido. ` +
                         `Payment: ${lockedPayment.id}`
@@ -490,10 +437,6 @@ class PaymentService {
                 }
             } else {
 
-                /*
-                * Un pago inicial solo puede activar una sorpresa
-                * que todavía esté esperando su primer pago.
-                */
                 if (surprise.status !== 'PENDING_PAYMENT') {
 
                     console.warn(
@@ -508,25 +451,10 @@ class PaymentService {
                 }
             }
 
-            /*
-            * Calcular fechas según el plan.
-            */
-            const expiresAt = lockedPayment.durationDays === null
-                ? null
-                : new Date(
-                    lockedPayment.paidAt.getTime() +
-                    lockedPayment.durationDays * 24 * 60 * 60 * 1000
-                );
+            const expiresAt = lockedPayment.durationDays === null ? null : new Date(lockedPayment.paidAt.getTime() + lockedPayment.durationDays * 24 * 60 * 60 * 1000);
 
-            const gracePeriodEndsAt = expiresAt
-                ? new Date(
-                    expiresAt.getTime() + 20 * 24 * 60 * 60 * 1000
-                )
-                : null;
+            const gracePeriodEndsAt = expiresAt ? new Date(expiresAt.getTime() + 20 * 24 * 60 * 60 * 1000): null;
 
-            /*
-            * Activar la sorpresa dentro de la misma transacción.
-            */
             await surprise.update({
                 status: 'ACTIVE',
                 expiresAt,
@@ -536,16 +464,10 @@ class PaymentService {
             });
 
             return {
-                shouldSendCreationEmail:
-                    lockedPayment.plan !== 'permanent-upgrade'
+                shouldSendCreationEmail: lockedPayment.plan !== 'permanent-upgrade'
             };
         });
 
-        /*
-        * Las operaciones externas se realizan después del COMMIT.
-        * Nunca debemos generar el QR ni enviar correos dentro
-        * de la transacción de base de datos.
-        */
         if (!result.shouldSendCreationEmail) {
             return;
         }
@@ -554,8 +476,7 @@ class PaymentService {
             const updatedSurprise = await Surprise.findByPk(surpriseId);
 
             const frontendUrl = process.env.FRONTEND_URL;
-            const publicUrl =
-                `${frontendUrl}/sorpresa/${updatedSurprise.publicToken}`;
+            const publicUrl = `${frontendUrl}/sorpresa/${updatedSurprise.publicToken}`;
 
             const qrBuffer = await QrCardService.generateCard(
                 publicUrl,
