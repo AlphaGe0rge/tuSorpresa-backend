@@ -1,6 +1,7 @@
 const User = require('./user.model');
 const Surprise = require('./surprise.model');
 const Payment = require('./payment.model');
+const LegalConsent = require('./legal-consent.model');
 
 User.hasMany(Surprise, {
     foreignKey: 'userId',

@@ -3,6 +3,8 @@ const crypto = require('crypto');
 const Surprise = require('../models/surprise.model');
 const R2Service = require('./r2.service');
 const { User } = require('../models');
+const sequelize = require('../config/database');
+const LegalConsent = require('../models/legal-consent.model');
 
 class SurpriseService {
 
@@ -14,11 +16,14 @@ class SurpriseService {
         return crypto.createHash('sha512').update(token).digest('hex');
     }
 
-    static async create(data, userId = null) {
+    static async create(data, userId = null, metadata = {}) {
 
         this.validateData(data);
+        this.validateLegalConsents(data);
 
         const normalizedUserId = userId || null;
+        const TERMS_VERSION = '1.0';
+        const PRIVACY_VERSION = '1.0';
 
         let isAdmin = false;
 
@@ -35,30 +40,54 @@ class SurpriseService {
         const editToken = this.generateToken();
         const editTokenHash = this.hashEditToken(editToken);
 
-        const surprise = await Surprise.create({
-            userId: normalizedUserId,
-            template: data.template,
-            publicToken,
-            editTokenHash,
-            recipientName: data.recipientName,
-            senderName: data.senderName || null,
-            email: data.email,
-            photos: [],
-            dynamicData: data.dynamicData || {},
-            title: data.title || null,
-            message: data.message || null,
-            expiresAt: isAdmin ? null : (data.expiresAt || null),
-            status: isAdmin ? 'ACTIVE' : 'PENDING_PAYMENT'
-        });
+        const transaction = await sequelize.transaction();
 
-        return {
-            id: surprise.id,
-            publicToken,
-            editToken,
-            status: surprise.status,
-            template: surprise.template,
-            requiresPayment: !isAdmin
-        };
+        try {
+
+            const surprise = await Surprise.create({
+                userId: normalizedUserId,
+                template: data.template,
+                publicToken,
+                editTokenHash,
+                recipientName: data.recipientName,
+                senderName: data.senderName || null,
+                email: data.email,
+                photos: [],
+                dynamicData: data.dynamicData || {},
+                title: data.title || null,
+                message: data.message || null,
+                expiresAt: isAdmin ? null : (data.expiresAt || null),
+                status: isAdmin ? 'ACTIVE' : 'PENDING_PAYMENT'
+            }, { transaction });
+
+            await LegalConsent.create({
+                surpriseId: surprise.id,
+                userId: normalizedUserId,
+                email: data.email.trim().toLowerCase(),
+                termsAccepted: true,
+                privacyAuthorized: true,
+                contentRightsConfirmed: true,
+                termsVersion: TERMS_VERSION,
+                privacyVersion: PRIVACY_VERSION,
+                ipAddress: metadata.ipAddress || null,
+                userAgent: metadata.userAgent || null
+            }, { transaction });
+
+            await transaction.commit();
+
+            return {
+                id: surprise.id,
+                publicToken,
+                editToken,
+                status: surprise.status,
+                template: surprise.template,
+                requiresPayment: !isAdmin
+            };
+
+        } catch (error) {
+            await transaction.rollback();
+            throw error;
+        }
     }
 
     static async getByUserId(userId) {
@@ -299,9 +328,9 @@ class SurpriseService {
 
         const photo = currentPhotos.find(item => item.key === photoKey);
 
-        if (!photo) throw new Error('PHOTO_NOT_FOUND');
+        // if (!photo) throw new Error('PHOTO_NOT_FOUND');
         
-        await R2Service.delete(photo.key);
+        // await R2Service.delete(photo.key);
 
         const photos = currentPhotos.filter(item => item.key !== photoKey);
 
@@ -357,6 +386,15 @@ class SurpriseService {
             updatedAt: surprise.updatedAt,
             expiresAt: surprise.expiresAt
         };
+    }
+
+    static validateLegalConsents(data) {
+        const consents = data?.legalConsents;
+
+        if (!consents || consents.termsAccepted !== true || 
+            consents.privacyAuthorized !== true || consents.contentRightsConfirmed !== true) {
+            throw new Error('LEGAL_CONSENTS_REQUIRED');
+        }
     }
 
     static validateData(data) {

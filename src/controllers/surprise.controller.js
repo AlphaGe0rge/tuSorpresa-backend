@@ -8,7 +8,10 @@ class SurpriseController {
 
             const userId = req.user?.id ?? null;
 
-            const result = await SurpriseService.create(req.body, userId); 
+            const result = await SurpriseService.create(req.body, userId, {
+                ipAddress: req.ip,
+                userAgent: req.get('user-agent')
+            });
 
             return res.status(201).json({
                 success: true,
@@ -308,7 +311,8 @@ class SurpriseController {
             'EMAIL_REQUIRED',
             'INVALID_PHOTOS',
             'TOO_MANY_PHOTOS',
-            'INVALID_DYNAMIC_DATA'
+            'INVALID_DYNAMIC_DATA',
+            'LEGAL_CONSENTS_REQUIRED'
         ];
 
         return validationErrors.includes(error.message);
