@@ -27,10 +27,12 @@ class PaymentController {
                 PAYMENT_ID_REQUIRED: 400,
                 TRANSACTION_ID_REQUIRED: 400,
                 INVALID_SURPRISE_PLAN: 400,
+                INVALID_PAYMENT_PLAN: 400,
                 SURPRISE_NOT_FOUND: 404,
                 PAYMENT_NOT_FOUND: 404,
                 SURPRISE_ALREADY_PAID: 409,
                 SURPRISE_NOT_PENDING_PAYMENT: 409,
+                PAYMENT_IN_PROGRESS: 409,
                 SURPRISE_EXPIRED: 410,
                 INVALID_WOMPI_PRICE: 500,
                 INVALID_WOMPI_SIGNATURE_DATA: 500

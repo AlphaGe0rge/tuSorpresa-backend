@@ -93,18 +93,18 @@ class SurpriseService {
     static async getByUserId(userId) {
 
         if (!userId) throw new Error('USER_REQUIRED');
-        
+
         const surprises = await Surprise.findAll({
-            where: {
-                userId
-            },
-            order: [
-                ['createdAt', 'DESC']
-            ],
+            where: { userId },
+            order: [['createdAt', 'DESC']],
             attributes: {
                 exclude: ['editTokenHash']
             }
         });
+
+        await Promise.all(
+            surprises.map(surprise => this.refreshLifecycle(surprise))
+        );
 
         return surprises;
     }
@@ -112,9 +112,8 @@ class SurpriseService {
     static async getMyById(surpriseId, userId) {
 
         if (!userId) throw new Error('USER_REQUIRED');
-        
         if (!surpriseId) throw new Error('SURPRISE_NOT_FOUND');
-        
+
         const surprise = await Surprise.findOne({
             where: {
                 id: surpriseId,
@@ -126,8 +125,9 @@ class SurpriseService {
         });
 
         if (!surprise) throw new Error('SURPRISE_NOT_FOUND');
-        
-        await this.ensureAvailable(surprise);
+
+        // Durante la gracia se puede consultar, pero no editar.
+        await this.ensurePubliclyViewable(surprise);
 
         return surprise;
     }
@@ -147,7 +147,7 @@ class SurpriseService {
 
         if (!surprise) throw new Error('SURPRISE_NOT_FOUND');
         
-        await this.ensureAvailable(surprise);
+        await this.ensureEditable(surprise);
 
         const validated = this.validateData(data);
 
@@ -158,9 +158,7 @@ class SurpriseService {
             senderName: validated.senderName,
             title: validated.title,
             message: validated.message,
-            dynamicData: validated.dynamicData,
-            expiresAt: validated.expiresAt
-
+            dynamicData: validated.dynamicData
         });
 
         return this.serializeSurprise(surprise);
@@ -194,7 +192,7 @@ class SurpriseService {
             throw new Error('SURPRISE_NOT_FOUND');
         }
 
-        await this.ensureAvailable(surprise);
+        await this.ensurePubliclyViewable(surprise);
 
         return surprise;
     }
@@ -247,7 +245,7 @@ class SurpriseService {
 
         if (!surprise) throw new Error('SURPRISE_NOT_FOUND');
         
-        await this.ensureAvailable(surprise);
+        await this.ensureEditable(surprise);
 
         return surprise;
     }
@@ -341,6 +339,83 @@ class SurpriseService {
         };
     }
 
+    static async refreshLifecycle(surprise, transaction = null) {
+
+        if (!surprise) {
+            throw new Error('SURPRISE_NOT_FOUND');
+        }
+
+        const now = new Date();
+        const updates = {};
+
+        if (surprise.status === 'ACTIVE' && surprise.expiresAt) {
+            const expiresAt = new Date(surprise.expiresAt);
+
+            if (!surprise.gracePeriodEndsAt) {
+                updates.gracePeriodEndsAt = new Date(
+                    expiresAt.getTime() + 20 * 24 * 60 * 60 * 1000
+                );
+            }
+
+            if (expiresAt <= now) {
+                updates.status = 'EXPIRED';
+            }
+        }
+
+        const gracePeriodEndsAt = updates.gracePeriodEndsAt || surprise.gracePeriodEndsAt;
+
+        const currentStatus = updates.status || surprise.status;
+
+        if (currentStatus === 'EXPIRED') {
+            if (!gracePeriodEndsAt && surprise.expiresAt) {
+                updates.gracePeriodEndsAt = new Date(
+                    new Date(surprise.expiresAt).getTime() +
+                    20 * 24 * 60 * 60 * 1000
+                );
+            }
+
+            const deadline = updates.gracePeriodEndsAt || gracePeriodEndsAt;
+
+            if (deadline && now > new Date(deadline)) {
+                updates.status = 'DISABLED';
+            }
+        }
+
+        if (Object.keys(updates).length) {
+            await surprise.update(updates, { transaction });
+        }
+
+        return surprise;
+    }
+
+    static async ensurePubliclyViewable(surprise) {
+        await this.refreshLifecycle(surprise);
+
+        if (surprise.status === 'ACTIVE') {
+            return true;
+        }
+
+        if (
+            surprise.status === 'EXPIRED' &&
+            surprise.gracePeriodEndsAt &&
+            new Date() <= new Date(surprise.gracePeriodEndsAt)
+        ) {
+            return true;
+        }
+
+        throw new Error('SURPRISE_EXPIRED');
+    }
+
+    static async ensureEditable(surprise) {
+        await this.refreshLifecycle(surprise);
+
+        if (surprise.status !== 'ACTIVE') {
+            throw new Error('SURPRISE_EXPIRED');
+        }
+
+        return true;
+    }
+
     static async ensureAvailable(surprise) {
 
         if (surprise.status === 'DELETED') {
@@ -384,7 +459,8 @@ class SurpriseService {
             status: surprise.status,
             createdAt: surprise.createdAt,
             updatedAt: surprise.updatedAt,
-            expiresAt: surprise.expiresAt
+            expiresAt: surprise.expiresAt,
+            gracePeriodEndsAt: surprise.gracePeriodEndsAt
         };
     }
 

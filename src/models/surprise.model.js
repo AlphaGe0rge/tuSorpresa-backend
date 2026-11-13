@@ -70,6 +70,11 @@ const Surprise = sequelize.define('Surprise', {
         allowNull: false,
         defaultValue: 'PENDING_PAYMENT'
     },
+    gracePeriodEndsAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'grace_period_ends_at'
+    },
     createdAt: {
         type: DataTypes.DATE,
         allowNull: false,

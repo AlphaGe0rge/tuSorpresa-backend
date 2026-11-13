@@ -7,6 +7,7 @@ const EmailService = require('./email.service');
 const QrCardService = require('./qr-card.service');
 const SurpriseService = require('./surprise.service');
 const sequelize = require('../config/database');
+const { Op } = require('sequelize');
 
 class PaymentService {
 
@@ -19,6 +20,10 @@ class PaymentService {
             },
             permanent: {
                 priceCop: 48990,
+                durationDays: null
+            },
+            'permanent-upgrade': {
+                priceCop: 35000,
                 durationDays: null
             }
         };
@@ -40,7 +45,6 @@ class PaymentService {
         const planDetails = this.getPlanDetails(plan);
 
         const result = await sequelize.transaction(async (transaction) => {
-
             const surprise = await Surprise.findByPk(surpriseId, {
                 transaction,
                 lock: transaction.LOCK.UPDATE
@@ -54,20 +58,47 @@ class PaymentService {
                 editToken
             });
 
-            if (surprise.status === 'ACTIVE') {
-                throw new Error('SURPRISE_ALREADY_PAID');
+            await SurpriseService.refreshLifecycle(surprise, transaction);
+
+            if (plan === 'permanent-upgrade') {
+                if (
+                    surprise.status !== 'EXPIRED' ||
+                    !surprise.gracePeriodEndsAt ||
+                    new Date() > new Date(surprise.gracePeriodEndsAt)
+                ) {
+                    throw new Error('SURPRISE_EXPIRED');
+                }
+            } else {
+                if (surprise.status === 'ACTIVE') {
+                    throw new Error('SURPRISE_ALREADY_PAID');
+                }
+
+                if (surprise.status === 'EXPIRED' || surprise.status === 'DISABLED') {
+                    throw new Error('SURPRISE_EXPIRED');
+                }
+
+                if (surprise.status !== 'PENDING_PAYMENT') {
+                    throw new Error('SURPRISE_NOT_PENDING_PAYMENT');
+                }
             }
 
-            if (surprise.status === 'EXPIRED') {
-                throw new Error('SURPRISE_EXPIRED');
-            }
+            // Evitar crear varios intentos simultáneos para la misma sorpresa.
+            const pendingPayment = await Payment.findOne({
+                where: {
+                    surpriseId: surprise.id,
+                    status: {
+                        [Op.in]: ['CREATED', 'PENDING']
+                    }
+                },
+                transaction,
+                lock: transaction.LOCK.UPDATE
+            });
 
-            if (surprise.status !== 'PENDING_PAYMENT') {
-                throw new Error('SURPRISE_NOT_PENDING_PAYMENT');
+            if (pendingPayment) {
+                throw new Error('PAYMENT_IN_PROGRESS');
             }
 
             const amountInCents = planDetails.priceCop * 100;
-
             const reference = `SURPRISE-${surprise.id}-${crypto.randomUUID()}`;
 
             const signature = WompiService.generateIntegritySignature({
@@ -109,6 +140,7 @@ class PaymentService {
         });
 
         return result;
+
     }
 
     static async authorizeSurpriseAccess({surprise, userId = null, editToken = null}) {
@@ -251,100 +283,297 @@ class PaymentService {
         await this.applyTransaction(payment, transaction);
     }
 
-    static async applyTransaction(payment, transaction) {
-        
-        const allowedStatuses = ['PENDING', 'APPROVED', 'DECLINED', 'VOIDED', 'ERROR'];
+    static async applyTransaction(payment, wompiTransaction) {
 
-        if (!allowedStatuses.includes(transaction.status)) {
+        const allowedStatuses = [
+            'PENDING',
+            'APPROVED',
+            'DECLINED',
+            'VOIDED',
+            'ERROR'
+        ];
+
+        // Validaciones de la respuesta de Wompi.
+        if (!allowedStatuses.includes(wompiTransaction.status)) {
             throw new Error('INVALID_WOMPI_TRANSACTION_STATUS');
         }
 
-        if (transaction.currency !== payment.currency) {
+        if (wompiTransaction.currency !== payment.currency) {
             throw new Error('INVALID_PAYMENT_CURRENCY');
         }
 
-        if (Number(transaction.amount_in_cents) !== Number(payment.amountInCents)) {
+        if (
+            Number(wompiTransaction.amount_in_cents) !==
+            Number(payment.amountInCents)
+        ) {
             throw new Error('INVALID_PAYMENT_AMOUNT');
         }
 
-        if (transaction.reference !== payment.reference) {
+        if (wompiTransaction.reference !== payment.reference) {
             throw new Error('INVALID_PAYMENT_REFERENCE');
         }
 
-        if (!transaction.id) {
+        if (!wompiTransaction.id) {
             throw new Error('WOMPI_TRANSACTION_ID_REQUIRED');
         }
 
-        if (payment.wompiTransactionId && payment.wompiTransactionId !== transaction.id) {
+        if (
+            payment.wompiTransactionId &&
+            payment.wompiTransactionId !== wompiTransaction.id
+        ) {
             throw new Error('WOMPI_TRANSACTION_ID_MISMATCH');
         }
 
-        const previousStatus = payment.status;
+        /*
+        * Obtener el identificador de la sorpresa.
+        * El bloqueo real se hace dentro de la transacción.
+        */
+        const surpriseId = payment.surpriseId;
 
-        // No permitir que una notificación antigua cambie un pago aprobado.
-        if (previousStatus === 'APPROVED' && transaction.status !== 'APPROVED') {
-            return;
-        }
+        const result = await sequelize.transaction(async (dbTransaction) => {
 
-        payment.wompiTransactionId = transaction.id;
-        payment.status = transaction.status;
-        payment.paymentMethodType = transaction.payment_method_type || null;
-        payment.statusMessage = transaction.status_message || null;
-        payment.failureReason = ['DECLINED', 'ERROR', 'VOIDED'].includes(transaction.status) ? (transaction.status_message || transaction.status) : null;
+            /*
+            * IMPORTANTE:
+            * Mantener siempre el mismo orden de bloqueo:
+            * primero Surprise y después Payment.
+            *
+            * createPayment también bloquea primero Surprise.
+            */
 
-        if (transaction.status !== 'APPROVED') {
-            await payment.save();
-            return;
-        }
+            const surprise = await Surprise.findByPk(surpriseId, {
+                transaction: dbTransaction,
+                lock: dbTransaction.LOCK.UPDATE
+            });
 
-        payment.paidAt = payment.paidAt || new Date();
-        await payment.save();
+            if (!surprise) {
+                throw new Error('SURPRISE_NOT_FOUND');
+            }
 
-        // Consultar cuál es el intento de pago más reciente de esta sorpresa.
-        const latestPayment = await Payment.findOne({
-            where: { surpriseId: payment.surpriseId },
-            order: [['createdAt', 'DESC'], ['id', 'DESC']]
+            const lockedPayment = await Payment.findByPk(payment.id, {
+                transaction: dbTransaction,
+                lock: dbTransaction.LOCK.UPDATE
+            });
+
+            if (!lockedPayment) {
+                throw new Error('PAYMENT_NOT_FOUND');
+            }
+
+            // Verificar nuevamente que el pago corresponde a la referencia.
+            if (lockedPayment.reference !== wompiTransaction.reference) {
+                throw new Error('INVALID_PAYMENT_REFERENCE');
+            }
+
+            if (
+                lockedPayment.wompiTransactionId &&
+                lockedPayment.wompiTransactionId !== wompiTransaction.id
+            ) {
+                throw new Error('WOMPI_TRANSACTION_ID_MISMATCH');
+            }
+
+            const previousStatus = lockedPayment.status;
+
+            // No permitir que una notificación antigua cambie un pago aprobado.
+            if (
+                previousStatus === 'APPROVED' &&
+                wompiTransaction.status !== 'APPROVED'
+            ) {
+                return {
+                    shouldSendCreationEmail: false
+                };
+            }
+
+            // Un pago ya aprobado no debe procesarse nuevamente.
+            if (
+                previousStatus === 'APPROVED' &&
+                wompiTransaction.status === 'APPROVED'
+            ) {
+                return {
+                    shouldSendCreationEmail: false
+                };
+            }
+
+            lockedPayment.wompiTransactionId = wompiTransaction.id;
+            lockedPayment.status = wompiTransaction.status;
+            lockedPayment.paymentMethodType =
+                wompiTransaction.payment_method_type || null;
+
+            lockedPayment.statusMessage =
+                wompiTransaction.status_message || null;
+
+            lockedPayment.failureReason = [
+                'DECLINED',
+                'ERROR',
+                'VOIDED'
+            ].includes(wompiTransaction.status)
+                ? (wompiTransaction.status_message || wompiTransaction.status)
+                : null;
+
+            if (wompiTransaction.status !== 'APPROVED') {
+                await lockedPayment.save({
+                    transaction: dbTransaction
+                });
+
+                return {
+                    shouldSendCreationEmail: false
+                };
+            }
+
+            lockedPayment.paidAt = lockedPayment.paidAt || new Date();
+
+            await lockedPayment.save({
+                transaction: dbTransaction
+            });
+
+            /*
+            * Validar coherencia del plan.
+            */
+            if (
+                lockedPayment.plan === '30-days' &&
+                Number(lockedPayment.durationDays) !== 30
+            ) {
+                throw new Error('INVALID_PAYMENT_PLAN');
+            }
+
+            if (
+                ['permanent', 'permanent-upgrade'].includes(lockedPayment.plan) &&
+                lockedPayment.durationDays !== null
+            ) {
+                throw new Error('INVALID_PAYMENT_PLAN');
+            }
+
+            /*
+            * Evitar que un pago anterior reemplace una sorpresa
+            * que ya fue convertida a permanente.
+            */
+            const isAlreadyPermanent =
+                surprise.status === 'ACTIVE' &&
+                surprise.expiresAt === null;
+
+            if (
+                isAlreadyPermanent &&
+                lockedPayment.plan !== 'permanent-upgrade'
+            ) {
+                console.warn(
+                    `La sorpresa ${surprise.id} ya es permanente. ` +
+                    `No se aplicará nuevamente el pago ${lockedPayment.id}.`
+                );
+
+                return {
+                    shouldSendCreationEmail: false
+                };
+            }
+
+            /*
+            * Validar la recuperación permanente.
+            *
+            * No exigimos que la sorpresa siga en EXPIRED:
+            * si el pago se inició dentro del plazo, debe respetarse
+            * aunque Wompi confirme después de los 20 días.
+            */
+            if (lockedPayment.plan === 'permanent-upgrade') {
+
+                const deadline = surprise.gracePeriodEndsAt;
+                const paymentCreatedAt = new Date(lockedPayment.createdAt);
+
+                if (
+                    !deadline ||
+                    paymentCreatedAt > new Date(deadline)
+                ) {
+                    console.error(
+                        `Recuperación fuera del periodo permitido. ` +
+                        `Payment: ${lockedPayment.id}`
+                    );
+
+                    return {
+                        shouldSendCreationEmail: false
+                    };
+                }
+            } else {
+
+                /*
+                * Un pago inicial solo puede activar una sorpresa
+                * que todavía esté esperando su primer pago.
+                */
+                if (surprise.status !== 'PENDING_PAYMENT') {
+
+                    console.warn(
+                        `El pago ${lockedPayment.id} fue aprobado, ` +
+                        `pero la sorpresa ${surprise.id} ya no está ` +
+                        `en estado PENDING_PAYMENT.`
+                    );
+
+                    return {
+                        shouldSendCreationEmail: false
+                    };
+                }
+            }
+
+            /*
+            * Calcular fechas según el plan.
+            */
+            const expiresAt = lockedPayment.durationDays === null
+                ? null
+                : new Date(
+                    lockedPayment.paidAt.getTime() +
+                    lockedPayment.durationDays * 24 * 60 * 60 * 1000
+                );
+
+            const gracePeriodEndsAt = expiresAt
+                ? new Date(
+                    expiresAt.getTime() + 20 * 24 * 60 * 60 * 1000
+                )
+                : null;
+
+            /*
+            * Activar la sorpresa dentro de la misma transacción.
+            */
+            await surprise.update({
+                status: 'ACTIVE',
+                expiresAt,
+                gracePeriodEndsAt
+            }, {
+                transaction: dbTransaction
+            });
+
+            return {
+                shouldSendCreationEmail:
+                    lockedPayment.plan !== 'permanent-upgrade'
+            };
         });
 
-        // Un intento antiguo puede quedar registrado como aprobado,
-        // pero no debe activar la sorpresa con un plan anterior.
-        if (!latestPayment || String(latestPayment.id) !== String(payment.id)) {
-            console.error(
-                `Pago aprobado de un intento anterior. Payment: ${payment.id}, Surprise: ${payment.surpriseId}`
-            );
+        /*
+        * Las operaciones externas se realizan después del COMMIT.
+        * Nunca debemos generar el QR ni enviar correos dentro
+        * de la transacción de base de datos.
+        */
+        if (!result.shouldSendCreationEmail) {
             return;
         }
-
-        const expiresAt = payment.durationDays === null
-            ? null
-            : new Date(payment.paidAt.getTime() + payment.durationDays * 24 * 60 * 60 * 1000);
-
-        await payment.surprise.update({
-            status: 'ACTIVE',
-            expiresAt
-        });
-
-        // No volver a enviar el correo si Wompi repite el webhook.
-        if (previousStatus === 'APPROVED') return;
 
         try {
+            const updatedSurprise = await Surprise.findByPk(surpriseId);
+
             const frontendUrl = process.env.FRONTEND_URL;
-            const publicUrl = `${frontendUrl}/sorpresa/${payment.surprise.publicToken}`;
+            const publicUrl =
+                `${frontendUrl}/sorpresa/${updatedSurprise.publicToken}`;
 
             const qrBuffer = await QrCardService.generateCard(
                 publicUrl,
-                payment.surprise.template
+                updatedSurprise.template
             );
 
             await EmailService.sendSurpriseCreated({
-                email: payment.surprise.email,
-                senderName: payment.surprise.senderName,
-                publicToken: payment.surprise.publicToken,
+                email: updatedSurprise.email,
+                senderName: updatedSurprise.senderName,
+                publicToken: updatedSurprise.publicToken,
                 qrBuffer
             });
-            
+
         } catch (error) {
-            console.error('Unable to send paid surprise email:', error);
+            console.error(
+                'Unable to send paid surprise email:',
+                error
+            );
         }
     }
 

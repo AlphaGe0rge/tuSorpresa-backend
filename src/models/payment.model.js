@@ -79,7 +79,7 @@ const Payment = sequelize.define('Payment', {
         field: 'paid_at'
     },
     plan: {
-        type: DataTypes.ENUM('30-days', 'permanent'),
+        type: DataTypes.ENUM('30-days', 'permanent', 'permanent-upgrade'),
         allowNull: false
     },
     durationDays: {

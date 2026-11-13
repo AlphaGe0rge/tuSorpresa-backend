@@ -185,12 +185,18 @@ class SurpriseController {
                 SURPRISE_EXPIRED: 410,
                 PHOTOS_REQUIRED: 400,
                 TOO_MANY_PHOTOS: 400,
-                INVALID_PHOTO_TYPE:400
+                INVALID_PHOTO_TYPE: 400
             };
 
-            return res.status(statusCodes[error.message] || 500).json({
+            const status = statusCodes[error.message] || 500;
+
+            if (status === 500) {
+                console.error('Error uploading surprise photos:', error);
+            }
+
+            return res.status(status).json({
                 success: false,
-                message: error.message
+                message: status === 500 ? 'Unable to upload surprise photos' : error.message
             });
         }
     }
@@ -211,7 +217,6 @@ class SurpriseController {
             });
 
         } catch (error) {
-
             const statusCodes = {
                 USER_REQUIRED: 401,
                 SURPRISE_NOT_FOUND: 404,
@@ -219,9 +224,17 @@ class SurpriseController {
                 PHOTO_NOT_FOUND: 404
             };
 
-            return res.status(statusCodes[error.message] || 500).json({
+            const status = statusCodes[error.message] || 500;
+
+            if (status === 500) {
+                console.error('Error deleting surprise photo:', error);
+            }
+
+            return res.status(status).json({
                 success: false,
-                message: error.message
+                message: status === 500
+                    ? 'Unable to delete surprise photo'
+                    : error.message
             });
         }
     }
