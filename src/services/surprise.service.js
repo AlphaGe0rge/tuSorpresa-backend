@@ -328,9 +328,9 @@ class SurpriseService {
 
         const photo = currentPhotos.find(item => item.key === photoKey);
 
-        // if (!photo) throw new Error('PHOTO_NOT_FOUND');
+        if (!photo) throw new Error('PHOTO_NOT_FOUND');
         
-        // await R2Service.delete(photo.key);
+        await R2Service.delete(photo.key);
 
         const photos = currentPhotos.filter(item => item.key !== photoKey);
 
