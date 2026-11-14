@@ -127,7 +127,7 @@ class SurpriseService {
         if (!surprise) throw new Error('SURPRISE_NOT_FOUND');
 
         // Durante la gracia se puede consultar, pero no editar.
-        await this.ensurePubliclyViewable(surprise);
+        await this.ensureOwnerViewable(surprise);
 
         return surprise;
     }
@@ -389,12 +389,34 @@ class SurpriseService {
     }
 
     static async ensurePubliclyViewable(surprise) {
+
         await this.refreshLifecycle(surprise);
 
         if (surprise.status === 'ACTIVE') {
             return true;
         }
 
+        if (surprise.status === 'EXPIRED' && surprise.gracePeriodEndsAt && new Date() <= new Date(surprise.gracePeriodEndsAt)) {
+            return true;
+        }
+
+        throw new Error('SURPRISE_EXPIRED');
+    }
+
+    static async ensureOwnerViewable(surprise) {
+
+        await this.refreshLifecycle(surprise);
+
+        // El propietario puede continuar una sorpresa sin pagar.
+        if (surprise.status === 'PENDING_PAYMENT') {
+            return true;
+        }
+
+        if (surprise.status === 'ACTIVE') {
+            return true;
+        }
+
+        // Durante el periodo de gracia puede consultar la sorpresa.
         if (
             surprise.status === 'EXPIRED' &&
             surprise.gracePeriodEndsAt &&
