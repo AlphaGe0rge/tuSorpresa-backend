@@ -384,9 +384,7 @@ class PaymentService {
                 : null;
 
             if (wompiTransaction.status !== 'APPROVED') {
-                await lockedPayment.save({
-                    transaction: dbTransaction
-                });
+                await lockedPayment.save({transaction: dbTransaction});
 
                 return {
                     shouldSendCreationEmail: false
