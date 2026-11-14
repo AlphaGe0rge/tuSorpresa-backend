@@ -245,7 +245,7 @@ class SurpriseService {
 
         if (!surprise) throw new Error('SURPRISE_NOT_FOUND');
         
-        await this.ensureEditable(surprise);
+        await this.ensurePhotosEditable(surprise);
 
         return surprise;
     }
@@ -404,6 +404,17 @@ class SurpriseService {
         }
 
         throw new Error('SURPRISE_EXPIRED');
+    }
+
+    static async ensurePhotosEditable(surprise) {
+
+        await this.refreshLifecycle(surprise);
+
+        if (!['ACTIVE', 'PENDING_PAYMENT'].includes(surprise.status)) {
+            throw new Error('SURPRISE_EXPIRED');
+        }
+
+        return true;
     }
 
     static async ensureEditable(surprise) {
